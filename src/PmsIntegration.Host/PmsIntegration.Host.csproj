@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.1" />
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PmsIntegration.Application\PmsIntegration.Application.csproj" />
+    <ProjectReference Include="..\PmsIntegration.Infrastructure\PmsIntegration.Infrastructure.csproj" />
+    <ProjectReference Include="..\PmsIntegration.Providers.Fake\PmsIntegration.Providers.Fake.csproj" />
+    <ProjectReference Include="..\PmsIntegration.Providers.Tiger\PmsIntegration.Providers.Tiger.csproj" />
+    <ProjectReference Include="..\PmsIntegration.Providers.Opera\PmsIntegration.Providers.Opera.csproj" />
+  </ItemGroup>
+
+</Project>
