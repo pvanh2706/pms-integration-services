@@ -16,10 +16,12 @@ namespace PmsIntegration.Host.Middleware;
 public sealed class PmsTokenMiddleware
 {
     private readonly RequestDelegate _next;
+    private readonly ILogger<PmsTokenMiddleware> _logger;
 
-    public PmsTokenMiddleware(RequestDelegate next)
+    public PmsTokenMiddleware(RequestDelegate next, ILogger<PmsTokenMiddleware> logger)
     {
         _next = next;
+        _logger = logger;
     }
 
     public async Task InvokeAsync(HttpContext context, IOptions<PmsSecurityOptions> securityOptions)
@@ -49,9 +51,15 @@ public sealed class PmsTokenMiddleware
         // BUG-2 FIX: take only the first value from StringValues.
         // StringValues.ToString() with multiple header values joins them with ",",
         // which could allow a crafted multi-header request to match a value like "abc,junk".
-        var suppliedToken = context.Request.Headers[headerName].FirstOrDefault();
+        // Trim whitespace to tolerate minor transport artefacts (e.g. trailing space).
+        var suppliedToken = context.Request.Headers[headerName].FirstOrDefault()?.Trim();
         if (suppliedToken is null)
         {
+            _logger.LogWarning(
+                "PMS token header '{HeaderName}' missing on {Method} {Path}",
+                headerName,
+                context.Request.Method,
+                context.Request.Path);
             await RejectAsync(context);
             return;
         }
@@ -61,6 +69,11 @@ public sealed class PmsTokenMiddleware
         // so FixedTimeEquals can always run to completion regardless of input length.
         if (!TokensEqual(suppliedToken, options.FixedToken))
         {
+            _logger.LogWarning(
+                "PMS token validation failed on {Method} {Path} from {RemoteIp}",
+                context.Request.Method,
+                context.Request.Path,
+                context.Connection.RemoteIpAddress);
             await RejectAsync(context);
             return;
         }

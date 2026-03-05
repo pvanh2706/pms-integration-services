@@ -44,11 +44,15 @@ public sealed class RabbitMqQueuePublisher : IQueuePublisher
     {
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(job));
         var conn = await _factory.GetConnectionAsync(ct);
-        await using var channel = await conn.CreateChannelAsync(cancellationToken: ct);
 
-        // BUG-5 FIX: enable publisher confirms so a broker-side nack/timeout surfaces
-        // as an exception here rather than silently losing the retry/DLQ message.
-        await channel.ConfirmSelectAsync(trackConfirmations: false, cancellationToken: ct);
+        // Publisher confirms in RabbitMQ.Client v7+: enabled via CreateChannelOptions.
+        // ConfirmSelectAsync / WaitForConfirmsOrDieAsync were removed in v7.
+        // With PublisherConfirmationTrackingEnabled = true, BasicPublishAsync awaits
+        // the broker ack internally — a nack surfaces as PublisherConfirmationException.
+        var channelOptions = new CreateChannelOptions(
+            publisherConfirmationsEnabled:        true,
+            publisherConfirmationTrackingEnabled: true);
+        await using var channel = await conn.CreateChannelAsync(channelOptions, ct);
 
         var props = new BasicProperties
         {
@@ -65,9 +69,8 @@ public sealed class RabbitMqQueuePublisher : IQueuePublisher
             basicProperties: props,
             body: body,
             cancellationToken: ct);
-
-        // Throws AmqpException if the broker nacks or the channel is closed.
-        await channel.WaitForConfirmsOrDieAsync(ct);
+        // With PublisherConfirmationTrackingEnabled = true, BasicPublishAsync already
+        // awaits the broker ack. No separate WaitForConfirmsOrDieAsync needed.
     }
 
     private static Dictionary<string, object?> BuildHeaders(IntegrationJob job, int attempt) =>

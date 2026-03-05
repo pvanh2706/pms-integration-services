@@ -9,10 +9,10 @@ public sealed class RabbitMqOptions
     public string Password { get; set; } = "guest";
 
     /// <summary>AMQP heartbeat interval. 0 = disabled (not recommended).</summary>
-    public int HeartbeatSeconds { get; set; } = 60;
+    public int HeartbeatSeconds { get; set; } = 30;
 
     /// <summary>How long to wait between automatic recovery attempts.</summary>
-    public int NetworkRecoveryIntervalSeconds { get; set; } = 5;
+    public int NetworkRecoveryIntervalSeconds { get; set; } = 10;
 
     /// <summary>TCP connection attempt timeout.</summary>
     public int RequestedConnectionTimeoutSeconds { get; set; } = 30;

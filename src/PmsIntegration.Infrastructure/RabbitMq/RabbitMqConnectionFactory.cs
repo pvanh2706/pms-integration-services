@@ -58,9 +58,13 @@ public sealed class RabbitMqConnectionFactory : IAsyncDisposable
                 // Explicit — do not rely on library defaults.
                 AutomaticRecoveryEnabled   = true,
                 TopologyRecoveryEnabled    = true,
+                // Heartbeat: default 30 s (RabbitMqOptions). Protects against silent TCP drops.
                 RequestedHeartbeat         = TimeSpan.FromSeconds(_options.HeartbeatSeconds),
+                // NetworkRecoveryInterval: default 10 s (RabbitMqOptions). Backoff between recovery attempts.
                 NetworkRecoveryInterval    = TimeSpan.FromSeconds(_options.NetworkRecoveryIntervalSeconds),
                 RequestedConnectionTimeout = TimeSpan.FromSeconds(_options.RequestedConnectionTimeoutSeconds)
+                // NOTE: DispatchConsumersAsync was removed in RabbitMQ.Client v7.
+                // Async dispatch (via AsyncEventingBasicConsumer) is now the default and only mode.
             };
 
             var conn = await factory.CreateConnectionAsync(ct);
@@ -107,20 +111,18 @@ public sealed class RabbitMqConnectionFactory : IAsyncDisposable
             return Task.CompletedTask;
         };
 
-        // Recovery events are on the IAutorecoveringConnection sub-interface.
-        if (conn is IAutorecoveringConnection rc)
+        // Recovery events are on IConnection directly in RabbitMQ.Client v7+
+        // (IAutorecoveringConnection sub-interface was removed in v7.0).
+        conn.RecoverySucceededAsync += (_, _) =>
         {
-            rc.RecoverySucceededAsync += (_, _) =>
-            {
-                _logger.LogInformation("RabbitMQ connection recovered successfully.");
-                return Task.CompletedTask;
-            };
-            rc.ConnectionRecoveryErrorAsync += (_, args) =>
-            {
-                _logger.LogError(args.Exception, "RabbitMQ connection recovery failed.");
-                return Task.CompletedTask;
-            };
-        }
+            _logger.LogInformation("RabbitMQ connection recovered successfully.");
+            return Task.CompletedTask;
+        };
+        conn.ConnectionRecoveryErrorAsync += (_, args) =>
+        {
+            _logger.LogError(args.Exception, "RabbitMQ connection recovery failed.");
+            return Task.CompletedTask;
+        };
     }
 
     public async ValueTask DisposeAsync()

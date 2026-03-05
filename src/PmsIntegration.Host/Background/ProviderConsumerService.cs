@@ -163,7 +163,9 @@ public sealed class ProviderConsumerService : BackgroundService
             {
                 JobId         = ea.BasicProperties?.MessageId ?? Guid.NewGuid().ToString(),
                 CorrelationId = ea.BasicProperties?.CorrelationId ?? string.Empty,
-                ProviderKey   = string.Empty,
+                // Use queue name as providerKey hint — we cannot deserialize the body,
+                // but the queue name uniquely identifies which consumer/provider was targeted.
+                ProviderKey   = _mainQueue,
                 HotelId       = string.Empty,
                 EventType     = "POISON",
                 RawPayload    = body
@@ -176,6 +178,15 @@ public sealed class ProviderConsumerService : BackgroundService
         }
 
         var attempt = GetAttempt(ea.BasicProperties.Headers);
+
+        // Add structured log fields for every log entry inside this processing scope.
+        using var logScope = _logger.BeginScope(new Dictionary<string, object?>
+        {
+            ["Provider"]      = job.ProviderKey,
+            ["CorrelationId"] = job.CorrelationId,
+            ["Attempt"]       = attempt,
+            ["QueueName"]     = _mainQueue
+        });
 
         using var scope = _scopeFactory.CreateScope();
         var handler = scope.ServiceProvider.GetRequiredService<ProcessIntegrationJobHandler>();
@@ -193,18 +204,25 @@ public sealed class ProviderConsumerService : BackgroundService
             case IntegrationOutcome.RetryableFailure:
                 if (attempt + 1 > _queueOptions.MaxRetryAttempts)
                 {
-                    _logger.LogWarning("Max retries exceeded for job {JobId}. Sending to DLQ.", job.JobId);
+                    _logger.LogWarning(
+                        "Max retries ({MaxRetry}) exceeded for job {JobId} on provider {Provider} queue {QueueName}. Sending to DLQ.",
+                        _queueOptions.MaxRetryAttempts, job.JobId, job.ProviderKey, _mainQueue);
                     await _publisher.PublishDlqAsync(job, _dlqQueue, attempt, result.ErrorCode, result.ErrorMessage, CancellationToken.None);
                 }
                 else
                 {
+                    _logger.LogInformation(
+                        "Scheduling retry {NextAttempt}/{MaxRetry} for job {JobId} on provider {Provider}.",
+                        attempt + 1, _queueOptions.MaxRetryAttempts, job.JobId, job.ProviderKey);
                     await _publisher.PublishRetryAsync(job, _retryQueue, attempt, result.ErrorCode, result.ErrorMessage, CancellationToken.None);
                 }
                 await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, CancellationToken.None);
                 break;
 
             case IntegrationOutcome.NonRetryableFailure:
-                _logger.LogWarning("Non-retryable failure for job {JobId}. Sending to DLQ.", job.JobId);
+                _logger.LogWarning(
+                    "Non-retryable failure for job {JobId} on provider {Provider} queue {QueueName}. Sending to DLQ. ErrorCode={ErrorCode}",
+                    job.JobId, job.ProviderKey, _mainQueue, result.ErrorCode);
                 await _publisher.PublishDlqAsync(job, _dlqQueue, attempt, result.ErrorCode, result.ErrorMessage, CancellationToken.None);
                 await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, CancellationToken.None);
                 break;
@@ -225,6 +243,7 @@ public sealed class ProviderConsumerService : BackgroundService
             int i    => i,
             long l   => (int)l,
             byte[] b => int.TryParse(Encoding.UTF8.GetString(b), out var parsed) ? parsed : 1,
+            string s => int.TryParse(s, out var p) ? p : 1,
             _        => 1
         };
     }

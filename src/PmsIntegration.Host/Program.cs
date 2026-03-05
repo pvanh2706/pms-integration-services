@@ -1,4 +1,5 @@
 using Serilog;
+using Microsoft.Extensions.Options;
 using PmsIntegration.Application.DI;
 using PmsIntegration.Infrastructure.DI;
 using PmsIntegration.Infrastructure.Logging;
