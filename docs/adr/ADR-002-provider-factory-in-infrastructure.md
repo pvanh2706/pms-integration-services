@@ -74,7 +74,9 @@ public sealed class PmsProviderFactory : IPmsProviderFactory
     {
         var key = providerCode.Trim().ToUpperInvariant();
         if (!_providers.TryGetValue(key, out var provider))
-            throw new InvalidOperationException($"No provider registered for key '{key}'.");
+            throw new InvalidOperationException(
+                $"No IPmsProvider registered for provider code '{key}'. " +
+                $"Registered codes: [{string.Join(", ", RegisteredKeys)}]");
         return provider;
     }
 

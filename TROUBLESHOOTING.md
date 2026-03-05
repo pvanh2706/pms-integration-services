@@ -26,7 +26,7 @@ Every log entry in this service carries structured fields. The fastest way to di
 1. **Get the `correlationId`** — from the `X-Correlation-Id` response header or from the PMS event log.
 2. **Filter logs in Kibana** with `correlationId:<value>` to see the full pipeline trace.
 3. **Add `providerKey`** to narrow down which provider failed.
-4. **Check `auditAction`** to find the last known stage (`pms.received` → `job.enqueued` → `job.processing` → `job.success` / `job.failed` / `job.dlq`).
+4. **Check `auditAction`** to find the last known stage (`pms.received` → `job.enqueued` → `job.processing` → `job.success` / `job.retryable_failed` / `job.failed`). Jobs moved to DLQ are logged as `ILogger.LogWarning` (not an audit action); search for `message:*DLQ*`.
 
 Useful Kibana query pattern:
 
@@ -41,7 +41,7 @@ correlationId:"<guid>" AND providerKey:"TIGER"
 ### Symptom
 
 ```
-System.InvalidOperationException: No provider registered for key 'ACME'.
+System.InvalidOperationException: No IPmsProvider registered for provider code 'ACME'. Registered codes: [FAKE, TIGER, OPERA]
 ```
 
 The exception is thrown by `PmsProviderFactory.Get(providerCode)` inside `ProcessIntegrationJobHandler`.
@@ -75,7 +75,7 @@ Two providers are registered with the same `ProviderKey`, e.g. both return `"TIG
 `PmsProviderFactory` will throw at construction time:
 
 ```
-InvalidOperationException: More than one provider registered with key 'TIGER'.
+System.InvalidOperationException: Duplicate provider key 'TIGER' detected. Provider type: PmsIntegration.Providers.Tiger.TigerProvider
 ```
 
 ### Causes and fixes
@@ -149,8 +149,16 @@ Messages accumulate in `q.pms.<provider>` but `job.processing` never appears in 
 
 5. **RabbitMQ connection dropped?**
 
-   `RabbitMqConnectionFactory` holds a singleton `IConnection`. If the connection drops, consumers stop.  
-   Look for `RabbitMQ.Client` exceptions in logs. A restart of the Host process re-establishes the connection.
+   `RabbitMqConnectionFactory` uses `AutomaticRecoveryEnabled = true`, so transient disconnects are recovered at the connection level automatically.
+
+   Additionally, `ProviderConsumerService` has an outer reconnect loop: if the channel closes unexpectedly after auto-recovery is exhausted, the service waits `RabbitMq:ConsumerReconnectDelaySeconds` (default 10 s) and re-establishes the connection and channel on its own. **A process restart is not required for reconnection.**
+
+   Look for these log entries to monitor reconnection:
+   ```
+   Consumer for queue q.pms.tiger lost connection. Reconnecting in 10s.
+   Consumer connecting to queue: q.pms.tiger
+   Consumer active on queue: q.pms.tiger
+   ```
 
 ### Quick reset (non-production)
 
@@ -165,15 +173,15 @@ Restart-Service PmsIntegrationService
 
 ### Symptom
 
-After `MaxRetryAttempts` retries, messages appear in `q.pms.<provider>.dlq`.  
-Kibana shows `auditAction:"job.dlq"`.
+After `MaxRetryAttempts` retries, messages appear in `q.pms.<provider>.dlq`.
+Look for `LogWarning` entries containing "DLQ" in the logs (the DLQ routing is logged via `ILogger` in `ProviderConsumerService`, not via `IAuditLogger`).
 
 ### Diagnosis steps
 
 1. **Find the last error** in Kibana:
 
    ```
-   correlationId:"<guid>" AND auditAction:"job.failed"
+   correlationId:"<guid>" AND (auditAction:"job.failed" OR auditAction:"job.retryable_failed")
    ```
 
    Examine `x-last-error-code` and `x-last-error-message` fields.
@@ -281,12 +289,14 @@ Use these in the Kibana 6.8.23 Discover view with the single application index.
 | Goal | Query |
 |---|---|
 | Full trace for one event | `correlationId:"<guid>"` |
-| All failures for a provider | `providerKey:"TIGER" AND auditAction:"job.failed"` |
-| All DLQ events today | `auditAction:"job.dlq"` |
+| All retryable failures for a provider | `providerKey:"TIGER" AND auditAction:"job.retryable_failed"` |
+| All non-retryable failures for a provider | `providerKey:"TIGER" AND auditAction:"job.failed"` |
+| Jobs moved to DLQ | `level:"Warning" AND message:*DLQ*` (DLQ routing is logged via `ILogger.LogWarning`, not via `IAuditLogger`) |
 | Auth failures into the service | `message:"unauthorized"` |
 | Duplicate-ignored events | `auditAction:"job.duplicate_ignored"` |
 | All events for a hotel | `hotelId:"H001"` |
 | Retries for a specific job | `jobId:"<guid>"` |
-| Slow provider calls (timeout) | `providerKey:"OPERA" AND x-last-error-code:"TaskCanceledException"` |
+| Slow provider calls (timeout) | `providerKey:"OPERA" AND auditAction:"job.retryable_failed" AND x-last-error-code:"TIMEOUT"` |
+| Provider not registered | `auditAction:"job.provider_not_registered"` |
 
 **Tip:** Pin `correlationId` as a column in Kibana Discover to quickly scan related log lines across a single request.

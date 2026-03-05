@@ -108,12 +108,13 @@ src/
 │   │   └── RabbitMqHeaders.cs
 │   ├── Logging/
 │   │   ├── ElasticAuditLogger.cs         ← IAuditLogger → writes AUDIT log entries
-│   │   └── SerilogElasticSetup.cs        ← bootstraps Serilog → Elasticsearch
+│   │   └── SerilogElasticSetup.cs        ← bootstraps Serilog → Console (Elasticsearch sink is a commented-out production TODO)
 │   ├── Idempotency/
 │   │   ├── InMemoryIdempotencyStore.cs   ← default (dev/single-instance)
-│   │   └── RedisIdempotencyStore.cs      ← production
+│   │   ├── RedisIdempotencyStore.cs      ← production
+│   │   └── SqlIdempotencyStore.cs        ← placeholder skeleton (NotImplementedException)
 │   ├── Http/DelegatingHandlers/
-│   │   └── CorrelationIdHandler.cs       ← forwards X-Correlation-Id to provider HTTP calls
+│   │   └── CorrelationIdHandler.cs       ← injects X-Correlation-Id; must be wired to each named HttpClient via .AddHttpMessageHandler<CorrelationIdHandler>()
 │   ├── Config/
 │   │   └── AppSettingsConfigProvider.cs
 │   ├── Clock/
@@ -123,13 +124,14 @@ src/
 │   └── DI/
 │       └── InfrastructureServiceExtensions.cs
 │
-├── PmsIntegration.Providers.Abstractions/
-│   └── PmsProviderBase.cs                ← optional base class for providers
-│
-├── PmsIntegration.Providers.Fake/        ← reference implementation, used in tests
-├── PmsIntegration.Providers.Tiger/
-└── PmsIntegration.Providers.Opera/
-    (each follows the structure described in §4)
+├── Providers/
+│   ├── PmsIntegration.Providers.Abstractions/
+│   │   └── PmsProviderBase.cs                ← optional base class for providers
+│   │
+│   ├── PmsIntegration.Providers.Fake/        ← reference implementation, used in tests
+│   ├── PmsIntegration.Providers.Tiger/
+│   └── PmsIntegration.Providers.Opera/
+│       (each follows the structure described in §4)
 ```
 
 ```
@@ -151,7 +153,7 @@ tests/
 
 - .NET 10 SDK
 - Docker (for RabbitMQ)
-- Access to an Elasticsearch instance on port 9200 (or configure a local one)
+- Elasticsearch (optional — not required locally; `SerilogElasticSetup` currently writes to Console only)
 
 ### Start dependencies
 
@@ -236,7 +238,7 @@ sequenceDiagram
 
 ### Step 1 — Create the project
 
-Create `src/PmsIntegration.Providers.Acme/PmsIntegration.Providers.Acme.csproj`:
+Create `src/Providers/PmsIntegration.Providers.Acme/PmsIntegration.Providers.Acme.csproj`:
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
@@ -246,8 +248,10 @@ Create `src/PmsIntegration.Providers.Acme/PmsIntegration.Providers.Acme.csproj`:
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Providers.Abstractions is a sibling folder inside src/Providers/ -->
     <ProjectReference Include="..\PmsIntegration.Providers.Abstractions\PmsIntegration.Providers.Abstractions.csproj" />
-    <ProjectReference Include="..\PmsIntegration.Core\PmsIntegration.Core.csproj" />
+    <!-- Core is two levels up (src/PmsIntegration.Core/) -->
+    <ProjectReference Include="..\..\PmsIntegration.Core\PmsIntegration.Core.csproj" />
   </ItemGroup>
 </Project>
 ```
@@ -255,7 +259,7 @@ Create `src/PmsIntegration.Providers.Acme/PmsIntegration.Providers.Acme.csproj`:
 Add the project to the solution:
 
 ```bash
-dotnet sln PmsIntegration.sln add src/PmsIntegration.Providers.Acme/PmsIntegration.Providers.Acme.csproj
+dotnet sln PmsIntegration.sln add src/Providers/PmsIntegration.Providers.Acme/PmsIntegration.Providers.Acme.csproj
 ```
 
 ### Step 2 — Options class
@@ -385,7 +389,7 @@ public sealed class AcmeClient
     {
         var http = _httpFactory.CreateClient("ACME");
 
-        using var content = new StringContent(request.JsonBody, Encoding.UTF8, "application/json");
+        using var content = new StringContent(request.JsonBody ?? string.Empty, Encoding.UTF8, "application/json");
         // TODO: add provider-specific auth if required beyond the X-Api-Key header set in the builder
 
         var response = await http.PostAsync(request.Endpoint, content, ct);
@@ -393,8 +397,7 @@ public sealed class AcmeClient
         return new ProviderResponse
         {
             StatusCode = (int)response.StatusCode,
-            IsSuccess  = response.IsSuccessStatusCode,
-            RawBody    = await response.Content.ReadAsStringAsync(ct)
+            Body       = await response.Content.ReadAsStringAsync(ct)
         };
     }
 }
@@ -493,7 +496,7 @@ public static class AcmeServiceExtensions
 **`src/PmsIntegration.Host/PmsIntegration.Host.csproj`** — add a project reference:
 
 ```xml
-<ProjectReference Include="..\PmsIntegration.Providers.Acme\PmsIntegration.Providers.Acme.csproj" />
+<ProjectReference Include="..\Providers\PmsIntegration.Providers.Acme\PmsIntegration.Providers.Acme.csproj" />
 ```
 
 **`src/PmsIntegration.Host/Providers/ProvidersServiceExtensions.cs`** — add one line
@@ -799,6 +802,8 @@ dotnet test --filter "FullyQualifiedName~FakeMapperTests"
 
 ### How logs flow
 
+> **Current state:** `SerilogElasticSetup.Configure` writes to **Console** only. The diagram below shows the intended production flow with Elasticsearch. Enable it by wiring `Serilog.Sinks.Elasticsearch` in `SerilogElasticSetup.cs`.
+
 ```mermaid
 sequenceDiagram
     participant Code as Application / Consumer
@@ -837,9 +842,12 @@ All audit events are written by `ElasticAuditLogger` with an `auditAction` field
 | `job.enqueued` | `IntegrationJob` published to provider queue |
 | `job.processing` | Consumer started processing a job |
 | `job.success` | Provider API responded successfully |
-| `job.failed` | Provider API call failed |
-| `job.dlq` | Job moved to dead-letter queue |
+| `job.retryable_failed` | Provider API call failed with a retryable outcome (5xx, 408, 429, timeout) |
+| `job.failed` | Provider API call failed with a **non-retryable** outcome (4xx except 408/429, mapping error) |
+| `job.provider_not_registered` | `IPmsProviderFactory.Get` could not find a provider for the key |
 | `job.duplicate_ignored` | Idempotency check rejected as duplicate |
+
+> **Note:** Moving a job to DLQ is logged via `_logger.LogWarning` inside `ProviderConsumerService` (not via `IAuditLogger`). There is no `job.dlq` audit event emitted.
 
 ### Kibana queries for common scenarios
 
@@ -852,17 +860,19 @@ correlationId:"3fa85f64-5717-4562-b3fc-2c963f66afa6"
 Sort by `@timestamp` asc. You should see the full sequence:
 `pms.received` → `job.enqueued` → `job.processing` → `job.success`
 
-**All failures for a provider:**
+**All failures for a provider (retryable or non-retryable):**
 
 ```
-providerKey:"TIGER" AND auditAction:"job.failed"
+providerKey:"TIGER" AND (auditAction:"job.retryable_failed" OR auditAction:"job.failed")
 ```
 
 **All DLQ events in the last 24 hours:**
 
 ```
-auditAction:"job.dlq"
+level:"Warning" AND message:*DLQ*
 ```
+
+> DLQ routing is logged via `ILogger.LogWarning` in `ProviderConsumerService`, not via `IAuditLogger`.
 
 **A specific hotel's events:**
 
@@ -886,7 +896,7 @@ When `job.failed` appears, check:
 2. `x-last-error-message` — provider error body excerpt
 3. `attempt` — how many retries have occurred
 
-If `attempt` equals `MaxRetryAttempts` (default `3`), the next entry will be `job.dlq`.
+If `attempt` equals `MaxRetryAttempts` (default `3`), the next entry in the log will be a `LogWarning` from `ProviderConsumerService` indicating the job was sent to the DLQ (not an audit action — look for `message:*DLQ*` or `message:*Sending to DLQ*`).
 
 ### Pushing log context in new code
 

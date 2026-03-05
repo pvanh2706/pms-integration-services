@@ -39,6 +39,9 @@ Constraints:
 
 - Configuration is centralised in `SerilogElasticSetup.Configure` (in
   `PmsIntegration.Infrastructure/Logging/`).
+- **Current implementation:** `SerilogElasticSetup.Configure` wires only the **Console** sink.
+  The `WriteTo.Elasticsearch(...)` call is present as a commented-out production template.
+  Enable it by adding `Serilog.Sinks.Elasticsearch` and replacing the comment block.
 - The Host bootstraps Serilog before the DI container is built:
 
   ```csharp
@@ -97,9 +100,12 @@ Fixed audit action strings:
 | `job.enqueued` | `IntegrationJob` published to a provider queue |
 | `job.processing` | Consumer picks up a job and begins processing |
 | `job.success` | Provider API call returned a successful response |
-| `job.failed` | Provider API call failed (retryable or non-retryable) |
-| `job.dlq` | Job moved to the dead-letter queue |
+| `job.retryable_failed` | Provider API call failed with a retryable outcome (5xx, 408, 429, timeout, network error) |
+| `job.failed` | Provider API call failed with a **non-retryable** outcome (4xx except 408/429, mapping error) |
+| `job.provider_not_registered` | `IPmsProviderFactory.Get` could not find a provider for the key |
 | `job.duplicate_ignored` | Idempotency check rejected the job as a duplicate |
+
+> **Note:** Moving a job to DLQ is logged via `ILogger.LogWarning` in `ProviderConsumerService`, not via `IAuditLogger`. There is currently no `job.dlq` audit action emitted.
 
 Log format:
 
@@ -135,7 +141,7 @@ The `correlationId` must appear in every log line related to a job:
 | HTTP response | `PmsEventController` sets `X-Correlation-Id` response header |
 | `IntegrationJob` | `IntegrationJob.CorrelationId` carries it |
 | RabbitMQ message | `correlationId` AMQP header |
-| Provider HTTP request | `CorrelationIdHandler` (delegating handler) adds `X-Correlation-Id` header |
+| Provider HTTP request | `CorrelationIdHandler` (delegating handler) can add `X-Correlation-Id` to outbound calls; must be wired to each named `HttpClient` via `.AddHttpMessageHandler<CorrelationIdHandler>()` in the provider's DI extension. Providers may also set `X-Correlation-Id` directly in `ProviderRequest.Headers`. |
 | Consumer log scope | `LogContext.PushProperty("correlationId", ...)` inside the consumer |
 
 ---

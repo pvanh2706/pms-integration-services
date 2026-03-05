@@ -1,78 +1,79 @@
-# Providers
+# Nhà cung cấp (Providers)
 
-> How to understand, extend, and test provider modules in the PMS Integration Service.
-
----
-
-## Table of Contents
-
-1. [What a Provider Is](#what-a-provider-is)
-2. [Existing Providers](#existing-providers)
-3. [Add a New Provider in 30 Minutes](#add-a-new-provider-in-30-minutes)
-4. [Provider Template](#provider-template)
-5. [DI Rules](#di-rules)
-6. [Testing per Provider](#testing-per-provider)
+> Cách hiểu, mở rộng và kiểm thử các module provider trong Dịch vụ Tích hợp PMS.
 
 ---
 
-## What a Provider Is
+## Mục lục
 
-A **provider** is a self-contained .NET project that knows how to:
+1. [Provider là gì](#provider-là-gì)
+2. [Các provider hiện có](#các-provider-hiện-có)
+3. [Thêm nhà cung cấp mới trong 30 phút](#thêm-nhà-cung-cấp-mới-trong-30-phút)
+4. [Template provider](#template-provider)
+5. [Quy tắc DI](#quy-tắc-di)
+6. [Kiểm thử theo từng provider](#kiểm-thử-theo-từng-provider)
 
-1. Map an `IntegrationJob` into a provider-specific `ProviderRequest` (`BuildRequestAsync` — pure mapping, no I/O)
-2. Send that request to the external provider API and return a `ProviderResponse` (`SendAsync` — HTTP transport only)
+---
 
-The rest of the pipeline (queue publishing, retry, idempotency, audit logging) is handled by `Infrastructure` and `Application`. The provider module never touches a queue.
+## Provider là gì
 
-**Core contract:**
+Một **provider** là một dự án .NET độc lập biết cách:
+
+1. Map một `IntegrationJob` thành `ProviderRequest` dành riêng cho nhà cung cấp (`BuildRequestAsync` — chỉ là pure mapping, không có I/O)
+2. Gửi request đó đến external provider API và trả về `ProviderResponse` (`SendAsync` — chỉ là HTTP transport)
+
+Phần còn lại của pipeline (publish lên hàng đợi, retry, idempotency, audit logging) được xử lý bởi `Infrastructure` và `Application`. Provider module không bao giờ đụng đến hàng đợi.
+
+**Hợp đồng cốt lõi:**
 
 ```csharp
 public interface IPmsProvider
 {
-    string ProviderKey { get; }  // e.g. "TIGER"
+    string ProviderKey { get; }  // ví dụ "TIGER"
     Task<ProviderRequest> BuildRequestAsync(IntegrationJob job, CancellationToken ct);
     Task<ProviderResponse> SendAsync(ProviderRequest request, CancellationToken ct);
 }
 ```
 
-Providers may extend `PmsProviderBase` (from `PmsIntegration.Providers.Abstractions`) or implement `IPmsProvider` directly.
+Providers có thể kế thừa `PmsProviderBase` (từ `PmsIntegration.Providers.Abstractions`) hoặc triển khai `IPmsProvider` trực tiếp.
 
 ---
 
-## Existing Providers
+## Các provider hiện có
 
-| Provider key | Project | Config section | Notes |
+| Provider key | Dự án | Config section | Ghi chú |
 |---|---|---|---|
-| `FAKE` | `PmsIntegration.Providers.Fake` | `Providers:FAKE` | Dev/test only. Can simulate failures via `SimulateFailure` + `SimulatedStatusCode` |
-| `TIGER` | `PmsIntegration.Providers.Tiger` | `Providers:TIGER` | Auth via `ApiKey` + `ApiSecret` |
-| `OPERA` | `PmsIntegration.Providers.Opera` | `Providers:OPERA` | Auth via `ClientId` + `ClientSecret` |
+| `FAKE` | `PmsIntegration.Providers.Fake` | `Providers:FAKE` | Chỉ dùng cho dev/test. Có thể giả lập lỗi qua `SimulateFailure` + `SimulatedStatusCode` |
+| `TIGER` | `PmsIntegration.Providers.Tiger` | `Providers:TIGER` | Xác thực qua `ApiKey` + `ApiSecret` |
+| `OPERA` | `PmsIntegration.Providers.Opera` | `Providers:OPERA` | Xác thực qua `ClientId` + `ClientSecret` |
 
-### Fake provider extras
+### Các tính năng thêm của Fake provider
 
-`FakeOptions` exposes two test helpers:
+`FakeOptions` cung cấp hai helper kiểm thử:
 
-| Key | Type | Default | Effect |
+| Key | Kiểu | Mặc định | Hiệu ứng |
 |---|---|---|---|
-| `SimulateFailure` | bool | `false` | Forces `FakeClient` to return a failing response |
-| `SimulatedStatusCode` | int | `503` | HTTP status code returned when `SimulateFailure = true` |
+| `SimulateFailure` | bool | `false` | Bắt `FakeClient` trả về response thất bại |
+| `SimulatedStatusCode` | int | `503` | HTTP status code trả về khi `SimulateFailure = true` |
 
-Use these in development to exercise the retry and DLQ paths without needing a real provider.
+Dùng các tùy chọn này trong development để kiểm tra path retry và DLQ mà không cần nhà cung cấp thật.
 
 ---
 
-## Add a New Provider in 30 Minutes
+## Thêm nhà cung cấp mới trong 30 phút
 
-Follow this checklist exactly. No existing file in `Core`, `Application`, `Infrastructure`, or `Host` needs to be changed except where noted.
+Làm theo checklist này chính xác. Không có file nào trong `Core`, `Application`, `Infrastructure`, hoặc `Host` cần thay đổi ngoại trừ những nơi được chỉ định.
 
 ### Checklist
 
-- [ ] **1. Create the project**
+- [ ] **1. Tạo dự án**
 
   ```
   src/Providers/PmsIntegration.Providers.Acme/
-  Add a `ProjectReference` to `PmsIntegration.Core`.
+  Thêm `ProjectReference` tới `PmsIntegration.Core`.
+  ```
 
-- [ ] **2. Create the options class**
+- [ ] **2. Tạo lớp options**
 
   ```csharp
   // AcmeOptions.cs
@@ -83,50 +84,50 @@ Follow this checklist exactly. No existing file in `Core`, `Application`, `Infra
       public string BaseUrl { get; set; } = string.Empty;
       public string ApiKey  { get; set; } = string.Empty;
       public int    TimeoutSeconds { get; set; } = 15;
-      // Add provider-specific auth fields here
+      // Thêm các trường xác thực dành riêng cho provider tại đây
   }
   ```
 
-- [ ] **3. Create the mapper**
+- [ ] **3. Tạo mapper**
 
   ```
   Mapping/AcmeMapper.cs
   ```
 
-  Pure function, no I/O. Converts `IntegrationJob.Data` to the provider-specific schema.
+  Pure function, không có I/O. Chuyển đổi `IntegrationJob.Data` thành schema dành riêng cho provider.
 
-- [ ] **4. Create the request builder**
+- [ ] **4. Tạo request builder**
 
   ```
   AcmeRequestBuilder.cs
   ```
 
-  Calls the mapper; returns a populated `ProviderRequest`. No network calls.
+  Gọi mapper; trả về `ProviderRequest` đã điền đầy đủ. Không có gọi mạng.
 
-- [ ] **5. Create the HTTP client**
+- [ ] **5. Tạo HTTP client**
 
   ```
   AcmeClient.cs
   ```
 
-  Resolves the named `HttpClient` (`"ACME"`), sends `ProviderRequest.Body`, returns `ProviderResponse`.
+  Phân giải named `HttpClient` (`"ACME"`), gửi `ProviderRequest.Body`, trả về `ProviderResponse`.
 
-- [ ] **6. Create the provider class**
+- [ ] **6. Tạo lớp provider**
 
-  Extend `PmsProviderBase` or implement `IPmsProvider` directly.  
-  Set `ProviderKey => "ACME"` (uppercase, matches the config key).
+  Kế thừa `PmsProviderBase` hoặc triển khai `IPmsProvider` trực tiếp.  
+  Đặt `ProviderKey => "ACME"` (in hoa, khớp với config key).
 
-- [ ] **7. Create the DI extension method**
+- [ ] **7. Tạo DI extension method**
 
   ```
   DI/AcmeServiceExtensions.cs
   ```
 
-  See the [template](#di-extension-template) below.
+  Xem [template](#template-di-extension) bên dưới.
 
-- [ ] **8. Add the two config entries**
+- [ ] **8. Thêm hai config entry**
 
-  In `appsettings.json`:
+  Trong `appsettings.json`:
   ```json
   "Providers": {
     "ACME": {
@@ -142,32 +143,32 @@ Follow this checklist exactly. No existing file in `Core`, `Application`, `Infra
   }
   ```
 
-- [ ] **9. Register in Host (two lines total)**
+- [ ] **9. Đăng ký trong Host (tổng cộng hai dòng)**
 
-  In `src/PmsIntegration.Host/PmsIntegration.Host.csproj` add:
+  Trong `src/PmsIntegration.Host/PmsIntegration.Host.csproj` thêm:
   ```xml
   <ProjectReference Include="..\Providers\PmsIntegration.Providers.Acme\PmsIntegration.Providers.Acme.csproj" />
   ```
 
-  In `src/PmsIntegration.Host/Providers/ProvidersServiceExtensions.cs` add:
+  Trong `src/PmsIntegration.Host/Providers/ProvidersServiceExtensions.cs` thêm:
   ```csharp
   services.AddAcmeProvider(configuration);
   ```
-  This must be called **before** `services.AddSingleton<IPmsProviderFactory, PmsProviderFactory>()`.
+  Phải được gọi **trước** `services.AddSingleton<IPmsProviderFactory, PmsProviderFactory>()`.
 
-- [ ] **10. Build and verify**
+- [ ] **10. Build và xác minh**
 
   ```bash
   dotnet build PmsIntegration.sln
   ```
 
-  The `ProviderConsumerOrchestrator` discovers all `IPmsProvider` registrations automatically. No changes to `Host/Background/` are needed.
+  `ProviderConsumerOrchestrator` tự động phát hiện tất cả đăng ký `IPmsProvider`. Không cần thay đổi `Host/Background/`.
 
-- [ ] **11. Write tests** — see [Testing per Provider](#testing-per-provider).
+- [ ] **11. Viết tests** — xem [Kiểm thử theo từng provider](#kiểm-thử-theo-từng-provider).
 
 ---
 
-## Provider Template
+## Template provider
 
 ### AcmeOptions.cs
 
@@ -189,12 +190,12 @@ using PmsIntegration.Core.Contracts;
 
 namespace PmsIntegration.Providers.Acme.Mapping;
 
-/// <summary>Pure mapping — no I/O, fully unit-testable.</summary>
+/// <summary>Pure mapping — không có I/O, có thể unit-test hoàn toàn.</summary>
 public sealed class AcmeMapper
 {
     public AcmeJobPayload Map(IntegrationJob job)
     {
-        // TODO: map job.Data fields to the Acme API schema
+        // TODO: map các trường job.Data vào schema Acme API
         return new AcmeJobPayload
         {
             HotelId   = job.HotelId,
@@ -204,7 +205,7 @@ public sealed class AcmeMapper
     }
 }
 
-// TODO: define AcmeJobPayload to match the Acme API request body
+// TODO: định nghĩa AcmeJobPayload khớp với request body của Acme API
 public sealed class AcmeJobPayload
 {
     public string HotelId   { get; set; } = string.Empty;
@@ -233,7 +234,7 @@ public sealed class AcmeRequestBuilder
         return Task.FromResult(new ProviderRequest
         {
             ProviderKey = "ACME",
-            // TODO: set the correct endpoint path
+            // TODO: đặt endpoint path đúng
             Endpoint    = "/api/events",
             JsonBody    = JsonSerializer.Serialize(payload),
             Headers     = new Dictionary<string, string>
@@ -271,7 +272,7 @@ public sealed class AcmeClient
         var client = _httpFactory.CreateClient("ACME");
 
         using var content = new StringContent(request.JsonBody ?? string.Empty, Encoding.UTF8, "application/json");
-        // TODO: add provider-specific auth header, e.g. client.DefaultRequestHeaders.Add("X-Api-Key", _options.ApiKey)
+        // TODO: thêm auth header dành riêng cho provider, ví dụ client.DefaultRequestHeaders.Add("X-Api-Key", _options.ApiKey)
         var response = await client.PostAsync(request.Endpoint, content, ct);
 
         return new ProviderResponse
@@ -312,7 +313,7 @@ public sealed class AcmeProvider : PmsProviderBase
 }
 ```
 
-### DI extension template
+### Template DI extension
 
 ```csharp
 using Microsoft.Extensions.Configuration;
@@ -325,7 +326,7 @@ namespace PmsIntegration.Providers.Acme.DI;
 public static class AcmeServiceExtensions
 {
     /// <summary>
-    /// Registers the Acme provider.
+    /// Đăng ký Acme provider.
     /// Config section: <c>Providers:ACME</c>
     /// </summary>
     public static IServiceCollection AddAcmeProvider(
@@ -353,31 +354,31 @@ public static class AcmeServiceExtensions
 
 ---
 
-## DI Rules
+## Quy tắc DI
 
-1. **Config binding** — always bind to `Providers:<PROVIDER_KEY>` using `services.Configure<XxxOptions>(configuration.GetSection("Providers:ACME"))`.
+1. **Binding config** — luôn bind vào `Providers:<PROVIDER_KEY>` dùng `services.Configure<XxxOptions>(configuration.GetSection("Providers:ACME"))`.
 
-2. **Named HttpClient** — always use the provider key as the named client identifier (e.g. `"ACME"`). Configure `BaseAddress` and `Timeout` inside the factory action; do not capture `IOptions<T>` at construction time outside of DI.
+2. **Named HttpClient** — luôn dùng provider key làm định danh named client (ví dụ `"ACME"`). Cấu hình `BaseAddress` và `Timeout` bên trong factory action; không capture `IOptions<T>` tại thời điểm khởi tạo ngoài DI.
 
-3. **Lifetimes** — mappers, request builders, and clients are `Singleton`. This is safe because they are stateless.
+3. **Lifetimes** — mapper, request builder và client đều là `Singleton`. Điều này an toàn vì chúng là stateless.
 
-4. **IPmsProvider registration** — must be `services.AddSingleton<IPmsProvider, AcmeProvider>()`. This is how `PmsProviderFactory` discovers all providers via `IEnumerable<IPmsProvider>`.
+4. **Đăng ký IPmsProvider** — phải dùng `services.AddSingleton<IPmsProvider, AcmeProvider>()`. Đây là cách `PmsProviderFactory` phát hiện tất cả provider qua `IEnumerable<IPmsProvider>`.
 
-5. **Registration order** — all `AddXxxProvider()` calls in `ProvidersServiceExtensions` must come **before** `services.AddSingleton<IPmsProviderFactory, PmsProviderFactory>()`.
+5. **Thứ tự đăng ký** — tất cả lệnh gọi `AddXxxProvider()` trong `ProvidersServiceExtensions` phải đến **trước** `services.AddSingleton<IPmsProviderFactory, PmsProviderFactory>()`.
 
-6. **No direct instantiation in Host** — `Program.cs` must never manually instantiate a provider class. It calls `services.AddProviders(configuration)` only.
+6. **Không khởi tạo trực tiếp trong Host** — `Program.cs` không bao giờ được khởi tạo thủ công một lớp provider. Nó chỉ gọi `services.AddProviders(configuration)`.
 
-7. **No cross-provider references** — `PmsIntegration.Providers.Acme` must not reference `PmsIntegration.Providers.Tiger` or any other `Providers.*` project.
+7. **Không có tham chiếu cross-provider** — `PmsIntegration.Providers.Acme` không được tham chiếu `PmsIntegration.Providers.Tiger` hoặc bất kỳ dự án `Providers.*` nào khác.
 
 ---
 
-## Testing per Provider
+## Kiểm thử theo từng provider
 
-Each provider project should have a corresponding test project: `PmsIntegration.Providers.<Name>.Tests`.
+Mỗi dự án provider nên có một dự án test tương ứng: `PmsIntegration.Providers.<Tên>.Tests`.
 
-### Unit — Mapper tests
+### Unit — Tests cho Mapper
 
-Test the mapper in complete isolation. No mocks needed.
+Kiểm thử mapper hoàn toàn độc lập. Không cần mock.
 
 ```csharp
 [Fact]
@@ -388,7 +389,7 @@ public void Maps_checkin_event_to_acme_payload()
     {
         HotelId   = "H001",
         EventType = "Checkin",
-        // populate Data as needed
+        // điền Data khi cần
     };
 
     var result = mapper.Map(job);
@@ -398,9 +399,9 @@ public void Maps_checkin_event_to_acme_payload()
 }
 ```
 
-### Unit — Request builder tests
+### Unit — Tests cho Request builder
 
-Verify the `ProviderRequest` shape without touching HTTP.
+Xác minh hình dạng `ProviderRequest` mà không động đến HTTP.
 
 ```csharp
 [Fact]
@@ -416,9 +417,9 @@ public async Task BuildAsync_sets_correct_endpoint()
 }
 ```
 
-### Unit — RetryClassifier tests
+### Unit — Tests cho RetryClassifier
 
-`RetryClassifier` lives in `Application`, not in the provider, but each provider's error scenarios should be covered:
+`RetryClassifier` nằm trong `Application`, không phải trong provider, nhưng các tình huống lỗi của từng provider nên được cover:
 
 ```csharp
 [Theory]
@@ -433,23 +434,23 @@ public void Classifies_http_status_correctly(int statusCode, IntegrationOutcome 
 }
 ```
 
-### Integration — Provider integration tests (optional)
+### Integration — Tests tích hợp provider (tùy chọn)
 
-Use the `FAKE` provider as a stand-in when writing integration tests that exercise the full pipeline:
+Dùng `FAKE` provider như một stand-in khi viết integration test kiểm tra toàn bộ pipeline:
 
 ```csharp
-// FakeProviderIntegrationTests.cs already exists at:
+// FakeProviderIntegrationTests.cs đã có sẵn tại:
 // tests/PmsIntegration.Providers.Fake.Tests/FakeProviderIntegrationTests.cs
-// Use it as a reference for writing Acme integration tests.
+// Dùng làm tài liệu tham khảo khi viết Acme integration tests.
 ```
 
-For new providers, an integration test should:
-1. Build the DI container with only the target provider registered.
-2. Call `IPmsProvider.BuildRequestAsync` with a known `IntegrationJob`.
-3. Assert the `ProviderRequest` fields are correct.
-4. Optionally call `SendAsync` against a local mock HTTP server (e.g. `WireMock.Net`).
+Với provider mới, integration test nên:
+1. Build DI container chỉ với target provider được đăng ký.
+2. Gọi `IPmsProvider.BuildRequestAsync` với một `IntegrationJob` đã biết.
+3. Assert các trường `ProviderRequest` là đúng.
+4. Tùy chọn gọi `SendAsync` với một mock HTTP server cục bộ (ví dụ `WireMock.Net`).
 
-### Test project reference
+### Tham chiếu dự án test
 
 ```xml
 <!-- PmsIntegration.Providers.Acme.Tests.csproj -->

@@ -120,7 +120,7 @@ A **correlation ID** is a GUID string that traces a single PMS event through the
 | HTTP response | `X-Correlation-Id` response header is set by `PmsEventController` |
 | `IntegrationJob` | `IntegrationJob.CorrelationId` is copied from the envelope |
 | RabbitMQ message | `correlationId` header on the AMQP message |
-| Provider HTTP call | `X-Correlation-Id` request header added by `CorrelationIdHandler` (delegating handler) |
+| Provider HTTP call | `X-Correlation-Id` request header set by each provider's `RequestBuilder` in `ProviderRequest.Headers`; `CorrelationIdHandler` (in `Infrastructure/Http/DelegatingHandlers/`) exists for this purpose but must be wired to each named `HttpClient` explicitly via `.AddHttpMessageHandler<CorrelationIdHandler>()` |
 | All log entries | Always include `correlationId` as a structured field |
 
 ### Consumer rule
@@ -162,15 +162,20 @@ Fixed audit action strings logged by `ElasticAuditLogger`:
 | `job.enqueued` | Job published to the main queue |
 | `job.processing` | Consumer starts processing a job |
 | `job.success` | Provider API call succeeded |
-| `job.failed` | Provider API call failed (retryable or not) |
-| `job.dlq` | Job moved to DLQ |
-| `job.duplicate_ignored` | Idempotency check rejected the job |
+| `job.retryable_failed` | Provider API call failed with a retryable outcome (5xx, 408, 429, network error) |
+| `job.failed` | Provider API call failed with a **non-retryable** outcome (4xx except 408/429, mapping error) |
+| `job.provider_not_registered` | `IPmsProviderFactory.Get` could not find a provider for the key |
+| `job.duplicate_ignored` | Idempotency check rejected the job as a duplicate |
+
+> **Note:** Moving a job to the DLQ is logged via `ILogger` (`LogWarning`) inside `ProviderConsumerService`, not via `IAuditLogger`. There is currently no `job.dlq` audit action emitted.
 
 Audit log format:
 
 ```
 AUDIT {Action} {@Data}
 ```
+
+> **Note on field name:** `ElasticAuditLogger` uses the template parameter `{Action}`. Serilog serializes this as the structured property `Action` (PascalCase). Kibana queries in this documentation reference `auditAction:` — verify the actual field name in your Elasticsearch index once the Elasticsearch sink is wired and rename the template parameter to `{auditAction}` if needed for consistency.
 
 Example:
 
@@ -190,13 +195,10 @@ Example:
 
 ### Elasticsearch / Kibana
 
-- Serilog ships logs to Elasticsearch via `SerilogElasticSetup.Configure`.
+- Serilog is bootstrapped by `SerilogElasticSetup.Configure` in `Infrastructure/Logging/`.
+- **Current state:** only the **Console** sink is active. The `WriteTo.Elasticsearch(...)` call is provided as a commented-out production template inside `SerilogElasticSetup.cs`. To enable it, add `Serilog.Sinks.Elasticsearch` and replace the comment block.
 - Kibana version: **6.8.23**.
-- All logs go to a **single index**. The index name is configured in `appsettings.json`.
-
-  > **TODO:** Document the exact Elasticsearch `Serilog:WriteTo:0:Args:indexFormat` config key once confirmed.
-
-- Do not create per-provider indices. Use the correlation ID and `providerKey` fields to filter in Kibana.
+- All logs go to a **single index** (when Elasticsearch is wired). Do not create per-provider indices; use the `providerKey` field to filter.
 
 ---
 

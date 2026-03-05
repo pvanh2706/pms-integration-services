@@ -24,7 +24,7 @@ The service receives HTTP events from the PMS, fans each event out to per-provid
 |------|----------------|
 | .NET SDK | 10.0 |
 | RabbitMQ | 3.12+ |
-| Elasticsearch | 6.8.23 (Kibana 6.8.23) |
+| Elasticsearch | 6.8.23 (Kibana 6.8.23) — **production only**; not required locally (console logging is active by default) |
 
 ### 1 — Clone and restore
 
@@ -200,10 +200,11 @@ src/
   PmsIntegration.Application/   ← Use-cases, event routing, retry classification
   PmsIntegration.Core/          ← Contracts, interfaces, domain models (no deps)
   PmsIntegration.Infrastructure/← RabbitMQ, Serilog/Elastic, idempotency, clock
-  PmsIntegration.Providers.Abstractions/  ← PmsProviderBase helper
-  PmsIntegration.Providers.Fake/          ← Fake provider (testing/dev)
-  PmsIntegration.Providers.Tiger/         ← Tiger PMS provider
-  PmsIntegration.Providers.Opera/         ← Opera PMS provider
+  Providers/
+    PmsIntegration.Providers.Abstractions/  ← PmsProviderBase helper
+    PmsIntegration.Providers.Fake/          ← Fake provider (testing/dev)
+    PmsIntegration.Providers.Tiger/         ← Tiger PMS provider
+    PmsIntegration.Providers.Opera/         ← Opera PMS provider
 tests/
   PmsIntegration.Infrastructure.Tests/
   PmsIntegration.Providers.Fake.Tests/
