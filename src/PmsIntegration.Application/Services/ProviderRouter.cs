@@ -17,14 +17,17 @@ public sealed class ProviderRouter
 
     public string ResolveQueue(string providerKey)
     {
-        var normalized = providerKey.Trim().ToUpperInvariant();
+        var key        = providerKey.Trim();
+        var normalized = key.ToUpperInvariant();
         var configuredQueue = _config.Get($"Queues:ProviderQueues:{normalized}");
 
         if (!string.IsNullOrWhiteSpace(configuredQueue))
             return configuredQueue;
 
         // Default: q.pms.<providerKeyLower>
-        return $"q.pms.{normalized.ToLowerInvariant()}";
+        // Use key.ToLowerInvariant() directly — avoids converting UP then DOWN on the
+        // same string, which would allocate an intermediate uppercase copy for nothing.
+        return $"q.pms.{key.ToLowerInvariant()}";
     }
 
     public string ResolveRetryQueue(string mainQueue) => $"{mainQueue}.retry";

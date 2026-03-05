@@ -12,6 +12,9 @@ namespace PmsIntegration.Infrastructure.Providers;
 public sealed class PmsProviderFactory : IPmsProviderFactory
 {
     private readonly Dictionary<string, IPmsProvider> _providers;
+    // Cached once at construction — avoids allocating a new List<string> on every
+    // RegisteredKeys read or GetRegisteredProviderCodes() call.
+    private readonly IReadOnlyList<string> _cachedKeys;
 
     public PmsProviderFactory(IEnumerable<IPmsProvider> providers)
     {
@@ -33,12 +36,13 @@ public sealed class PmsProviderFactory : IPmsProviderFactory
 
             _providers[provider.ProviderKey] = provider;
         }
+
+        _cachedKeys = _providers.Keys.ToList().AsReadOnly();
     }
 
-    public IReadOnlyList<string> RegisteredKeys => _providers.Keys.ToList();
+    public IReadOnlyList<string> RegisteredKeys => _cachedKeys;
 
-    public IReadOnlyCollection<string> GetRegisteredProviderCodes()
-        => _providers.Keys.ToList().AsReadOnly();
+    public IReadOnlyCollection<string> GetRegisteredProviderCodes() => _cachedKeys;
 
     public IPmsProvider Get(string providerCode)
     {

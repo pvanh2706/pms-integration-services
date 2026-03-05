@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using PmsIntegration.Application.Services;
 using PmsIntegration.Core.Abstractions;
 using PmsIntegration.Core.Contracts;
@@ -19,20 +18,17 @@ public sealed class ProcessIntegrationJobHandler
     private readonly IIdempotencyStore _idempotency;
     private readonly RetryClassifier _classifier;
     private readonly IAuditLogger _audit;
-    private readonly ILogger<ProcessIntegrationJobHandler> _logger;
 
     public ProcessIntegrationJobHandler(
         IPmsProviderFactory providerFactory,
         IIdempotencyStore idempotency,
         RetryClassifier classifier,
-        IAuditLogger audit,
-        ILogger<ProcessIntegrationJobHandler> logger)
+        IAuditLogger audit)
     {
         _providerFactory = providerFactory;
         _idempotency = idempotency;
         _classifier = classifier;
         _audit = audit;
-        _logger = logger;
     }
 
     public async Task<IntegrationResult> HandleAsync(IntegrationJob job, CancellationToken ct = default)
@@ -57,10 +53,27 @@ public sealed class ProcessIntegrationJobHandler
             return IntegrationResult.Succeeded();
         }
 
+        // Resolve provider first — an unregistered provider key is a configuration error,
+        // not a transient failure, so it deserves its own audit action.
+        IPmsProvider provider;
         try
         {
-            var provider = _providerFactory.Get(job.ProviderKey);
+            provider = _providerFactory.Get(job.ProviderKey);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _audit.Log("job.provider_not_registered", new
+            {
+                job.JobId,
+                job.ProviderKey,
+                job.CorrelationId,
+                error = ex.Message
+            });
+            return IntegrationResult.NonRetryableFailed("PROVIDER_NOT_REGISTERED", ex.Message);
+        }
 
+        try
+        {
             var request = await provider.BuildRequestAsync(job, ct);
             var response = await provider.SendAsync(request, ct);
 
@@ -72,7 +85,10 @@ public sealed class ProcessIntegrationJobHandler
             }
 
             var result = _classifier.ClassifyHttpStatus(response.StatusCode);
-            var action = result.Outcome == IntegrationOutcome.RetryableFailure ? "job.failed" : "job.failed";
+            // RetryableFailure and PermanentFailure get distinct audit actions.
+            var action = result.Outcome == IntegrationOutcome.RetryableFailure
+                ? "job.retryable_failed"
+                : "job.failed";
             _audit.Log(action, new { job.JobId, response.StatusCode, result.Outcome });
             return result;
         }
