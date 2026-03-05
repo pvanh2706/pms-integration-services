@@ -1,19 +1,19 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Opera Cloud PMS provider plugin.
-    Depends on Core (contracts) and Providers.Abstractions (PmsProviderBase).
+    Fake PMS provider plugin — reference implementation.
+    Depends on Core (contracts) and Providers.Abstractions.
+    Does NOT use PmsProviderBase — shows the direct IPmsProvider implementation pattern.
     Must NOT reference any other provider project.
   -->
   <ItemGroup>
-    <ProjectReference Include="..\PmsIntegration.Core\PmsIntegration.Core.csproj" />
+    <ProjectReference Include="..\..\PmsIntegration.Core\PmsIntegration.Core.csproj" />
     <ProjectReference Include="..\PmsIntegration.Providers.Abstractions\PmsIntegration.Providers.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.3" />

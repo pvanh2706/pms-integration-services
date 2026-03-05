@@ -15,9 +15,9 @@
   <ItemGroup>
     <ProjectReference Include="..\PmsIntegration.Application\PmsIntegration.Application.csproj" />
     <ProjectReference Include="..\PmsIntegration.Infrastructure\PmsIntegration.Infrastructure.csproj" />
-    <ProjectReference Include="..\PmsIntegration.Providers.Fake\PmsIntegration.Providers.Fake.csproj" />
-    <ProjectReference Include="..\PmsIntegration.Providers.Tiger\PmsIntegration.Providers.Tiger.csproj" />
-    <ProjectReference Include="..\PmsIntegration.Providers.Opera\PmsIntegration.Providers.Opera.csproj" />
+    <ProjectReference Include="..\Providers\PmsIntegration.Providers.Fake\PmsIntegration.Providers.Fake.csproj" />
+    <ProjectReference Include="..\Providers\PmsIntegration.Providers.Tiger\PmsIntegration.Providers.Tiger.csproj" />
+    <ProjectReference Include="..\Providers\PmsIntegration.Providers.Opera\PmsIntegration.Providers.Opera.csproj" />
   </ItemGroup>
 
 </Project>

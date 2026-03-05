@@ -7,7 +7,7 @@
   -->
   <ItemGroup>
     <ProjectReference Include="..\..\src\PmsIntegration.Core\PmsIntegration.Core.csproj" />
-    <ProjectReference Include="..\..\src\PmsIntegration.Providers.Fake\PmsIntegration.Providers.Fake.csproj" />
+    <ProjectReference Include="..\..\src\Providers\PmsIntegration.Providers.Fake\PmsIntegration.Providers.Fake.csproj" />
   </ItemGroup>
 
   <ItemGroup>

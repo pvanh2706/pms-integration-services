@@ -7,7 +7,7 @@
     Must NOT contain any provider-specific implementation (Options, Client, Mapper, DI).
   -->
   <ItemGroup>
-    <ProjectReference Include="..\PmsIntegration.Core\PmsIntegration.Core.csproj" />
+    <ProjectReference Include="..\..\PmsIntegration.Core\PmsIntegration.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
