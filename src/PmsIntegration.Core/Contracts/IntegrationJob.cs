@@ -16,4 +16,10 @@ public sealed class IntegrationJob
     public string CorrelationId { get; set; } = string.Empty;
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public JsonElement? Data { get; set; }
+
+    /// <summary>
+    /// Preserved raw message body for poison messages that could not be deserialized.
+    /// Populated only when <see cref="EventType"/> is <c>"POISON"</c>.
+    /// </summary>
+    public string? RawPayload { get; set; }
 }

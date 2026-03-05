@@ -26,6 +26,7 @@ public sealed class ProviderConsumerOrchestrator : IHostedService
         IServiceScopeFactory scopeFactory,
         IQueuePublisher publisher,
         IOptions<QueueOptions> queueOptions,
+        IOptions<RabbitMqOptions> rabbitMqOptions,
         ILoggerFactory loggerFactory)
     {
         _logger = loggerFactory.CreateLogger<ProviderConsumerOrchestrator>();
@@ -46,6 +47,7 @@ public sealed class ProviderConsumerOrchestrator : IHostedService
                 scopeFactory,
                 publisher,
                 queueOptions,
+                rabbitMqOptions,
                 loggerFactory.CreateLogger<ProviderConsumerService>());
         }).ToList();
     }

@@ -46,6 +46,10 @@ public sealed class RabbitMqQueuePublisher : IQueuePublisher
         var conn = await _factory.GetConnectionAsync(ct);
         await using var channel = await conn.CreateChannelAsync(cancellationToken: ct);
 
+        // BUG-5 FIX: enable publisher confirms so a broker-side nack/timeout surfaces
+        // as an exception here rather than silently losing the retry/DLQ message.
+        await channel.ConfirmSelectAsync(trackConfirmations: false, cancellationToken: ct);
+
         var props = new BasicProperties
         {
             Persistent = true,
@@ -57,10 +61,13 @@ public sealed class RabbitMqQueuePublisher : IQueuePublisher
         await channel.BasicPublishAsync(
             exchange: "",
             routingKey: queue,
-            mandatory: false,
+            mandatory: true,
             basicProperties: props,
             body: body,
             cancellationToken: ct);
+
+        // Throws AmqpException if the broker nacks or the channel is closed.
+        await channel.WaitForConfirmsOrDieAsync(ct);
     }
 
     private static Dictionary<string, object?> BuildHeaders(IntegrationJob job, int attempt) =>
