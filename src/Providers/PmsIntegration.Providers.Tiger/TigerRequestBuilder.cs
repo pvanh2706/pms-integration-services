@@ -24,6 +24,21 @@ public sealed class TigerRequestBuilder : IPmsRequestBuilder
 
     public Task<ProviderRequest> BuildAsync(IntegrationJob job, CancellationToken ct = default)
     {
+        if (job.EventType.Equals("Checkin", StringComparison.OrdinalIgnoreCase))
+        {
+            var soapRequest = new ProviderRequest
+            {
+                ProviderKey   = ProviderKey,
+                CorrelationId = job.CorrelationId,
+                Method        = "POST",
+                Endpoint      = _options.SoapEndpoint,
+                JsonBody      = TigerCheckinSoapBuilder.Build(job, _options.WsUserKey),
+                Headers       = { ["Content-Type"] = "text/xml" }
+            };
+
+            return Task.FromResult(soapRequest);
+        }
+
         var request = new ProviderRequest
         {
             ProviderKey   = ProviderKey,

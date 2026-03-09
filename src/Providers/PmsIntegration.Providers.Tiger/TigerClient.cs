@@ -37,7 +37,15 @@ public sealed class TigerClient : IPmsClient
             request.Endpoint);
 
         if (request.JsonBody is not null)
-            httpRequest.Content = new StringContent(request.JsonBody, Encoding.UTF8, "application/json");
+        {
+            // Allow caller to override content type (e.g. "text/xml" for SOAP requests).
+            request.Headers.TryGetValue("Content-Type", out var contentType);
+            request.Headers.Remove("Content-Type");
+            httpRequest.Content = new StringContent(
+                request.JsonBody,
+                Encoding.UTF8,
+                contentType ?? "application/json");
+        }
 
         foreach (var (key, value) in request.Headers)
             httpRequest.Headers.TryAddWithoutValidation(key, value);

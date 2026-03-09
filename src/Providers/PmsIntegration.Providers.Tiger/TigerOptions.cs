@@ -7,4 +7,10 @@ public sealed class TigerOptions
     public string ApiKey { get; set; } = string.Empty;
     public string ApiSecret { get; set; } = string.Empty;
     public int TimeoutSeconds { get; set; } = 15;
+
+    /// <summary>SOAP endpoint for TigerTMS GenericPMS interface.</summary>
+    public string SoapEndpoint { get; set; } = "https://ichargev7publictest.tigertms.com/GenericPMS/";
+
+    /// <summary>Web-service user key passed inside the SOAP CheckIn payload (wsuserkey).</summary>
+    public string WsUserKey { get; set; } = string.Empty;
 }
