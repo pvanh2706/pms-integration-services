@@ -6,6 +6,7 @@ using PmsIntegration.Infrastructure.Config;
 using PmsIntegration.Infrastructure.Http.DelegatingHandlers;
 using PmsIntegration.Infrastructure.Idempotency;
 using PmsIntegration.Infrastructure.Logging;
+using PmsIntegration.Infrastructure.Logging.Extensions;
 using PmsIntegration.Infrastructure.Options;
 using PmsIntegration.Infrastructure.RabbitMq;
 
@@ -39,6 +40,9 @@ public static class InfrastructureServiceExtensions
 
         // HTTP handlers
         services.AddTransient<CorrelationIdHandler>();
+
+        // Flow logging — writes API_FLOW and PROVIDER_FLOW documents to Elasticsearch via Serilog
+        services.AddFlowLogging();
 
         return services;
     }

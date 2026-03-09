@@ -8,6 +8,10 @@ namespace PmsIntegration.Application.UseCases;
 /// <summary>
 /// Orchestrates the outbound flow:
 ///   idempotency check → build request → call provider → classify result.
+///
+/// The optional <see cref="IProviderFlowTracker"/> parameter on HandleAsync
+/// allows the Host layer to attach a flow-logger without introducing an
+/// infrastructure dependency here.
 /// </summary>
 public sealed class ProcessIntegrationJobHandler
 {
@@ -31,7 +35,21 @@ public sealed class ProcessIntegrationJobHandler
         _audit = audit;
     }
 
-    public async Task<IntegrationResult> HandleAsync(IntegrationJob job, CancellationToken ct = default)
+    /// <summary>
+    /// Processes an integration job.
+    /// </summary>
+    /// <param name="job">The job to process.</param>
+    /// <param name="flowTracker">
+    /// Optional callback object used by the Host (consumer) to record
+    /// fine-grained provider steps into the PROVIDER_FLOW log document.
+    /// Kept as a plain interface in Core.Abstractions to avoid a dependency
+    /// on PmsIntegration.Infrastructure from the Application layer.
+    /// </param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task<IntegrationResult> HandleAsync(
+        IntegrationJob job,
+        IProviderFlowTracker? flowTracker = null,
+        CancellationToken ct = default)
     {
         var idempotencyKey =
             $"{job.HotelId}:{job.EventId}:{job.EventType}:{job.ProviderKey}";
@@ -74,8 +92,17 @@ public sealed class ProcessIntegrationJobHandler
 
         try
         {
+            // ── Build request ─────────────────────────────────────────────
+            flowTracker?.OnStep(ProviderFlowStepNames.ProviderPayloadValidated);
+            flowTracker?.OnStep(ProviderFlowStepNames.RequestBuilding);
+
             var request = await provider.BuildRequestAsync(job, ct);
+            flowTracker?.OnRequestBuilt(request);
+
+            // ── Send request ──────────────────────────────────────────────
+            flowTracker?.OnStep(ProviderFlowStepNames.HttpSending);
             var response = await provider.SendAsync(request, ct);
+            flowTracker?.OnResponseReceived(response);
 
             if (response.IsSuccess)
             {

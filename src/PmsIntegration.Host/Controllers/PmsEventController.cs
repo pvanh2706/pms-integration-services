@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using PmsIntegration.Application.UseCases;
 using PmsIntegration.Core.Contracts;
+using PmsIntegration.Infrastructure.Logging.Flow;
+using PmsIntegration.Infrastructure.Logging.Masking;
 
 namespace PmsIntegration.Host.Controllers;
 
@@ -9,14 +11,17 @@ namespace PmsIntegration.Host.Controllers;
 public sealed class PmsEventController : ControllerBase
 {
     private readonly ReceivePmsEventHandler _handler;
+    private readonly IApiFlowLogger _flowLogger;
 
-    public PmsEventController(ReceivePmsEventHandler handler)
+    public PmsEventController(ReceivePmsEventHandler handler, IApiFlowLogger flowLogger)
     {
-        _handler = handler;
+        _handler    = handler;
+        _flowLogger = flowLogger;
     }
 
     /// <summary>
     /// Accepts a PMS event, fans out to provider queues, returns 202 Accepted.
+    /// Writes one API_FLOW document to Elasticsearch via Serilog.
     /// </summary>
     [HttpPost("events")]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
@@ -26,21 +31,84 @@ public sealed class PmsEventController : ControllerBase
         [FromBody] PmsEventEnvelope envelope,
         CancellationToken ct)
     {
+        var correlationId = string.IsNullOrWhiteSpace(envelope.CorrelationId)
+            ? Guid.NewGuid().ToString()
+            : envelope.CorrelationId;
+
+        // ── Start flow ────────────────────────────────────────────────────
+        _flowLogger.Start(
+            correlationId : correlationId,
+            provider      : string.Join(",", envelope.Providers),
+            eventType     : envelope.EventType,
+            eventId       : envelope.EventId,
+            hotelId       : envelope.HotelId,
+            requestId     : HttpContext.TraceIdentifier,
+            traceId       : HttpContext.TraceIdentifier);
+
+        var stepStart = DateTimeOffset.UtcNow;
+        _flowLogger.Step(ApiFlowStep.RequestReceived, stepStart);
+
+        // ── Log request payload (masked) ──────────────────────────────────
+        var rawBody    = envelope.Data.HasValue ? envelope.Data.Value.GetRawText() : null;
+        var maskedBody = rawBody is not null ? PayloadMasker.MaskJson(rawBody) : string.Empty;
+        _flowLogger.SetRequestPayload(rawBody, maskedBody, "application/json");
+
         try
         {
-            var correlationId = await _handler.HandleAsync(envelope, ct);
+            // Deserialization already done by model binding — record the step.
+            var desMark = DateTimeOffset.UtcNow;
+            _flowLogger.Step(ApiFlowStep.RequestDeserialized, desMark);
 
-            Response.Headers.Append("X-Correlation-Id", correlationId);
+            // ── Delegate to handler (validate + route + publish) ──────────
+            var publishStart = DateTimeOffset.UtcNow;
+            var returnedCorrelationId = await _handler.HandleAsync(envelope, ct);
+
+            // The handler validates, resolves queue, and publishes internally.
+            // We record coarse-grained steps here; fine-grained steps live in
+            // the PROVIDER_FLOW document written by the consumer.
+            _flowLogger.Step(ApiFlowStep.RequestValidated,  publishStart);
+            _flowLogger.Step(ApiFlowStep.ProviderResolved,  publishStart);
+            _flowLogger.Step(ApiFlowStep.QueueNameResolved, publishStart);
+            _flowLogger.Step(ApiFlowStep.MessageMapped,     publishStart);
+            _flowLogger.Step(ApiFlowStep.QueuePublishing,   publishStart);
+
+            var publishedAt = DateTimeOffset.UtcNow;
+            _flowLogger.Step(ApiFlowStep.QueuePublished,   publishedAt);
+            _flowLogger.Step(ApiFlowStep.ApiResponseReady, publishedAt);
+
+            _flowLogger.Complete();
+
+            Response.Headers.Append("X-Correlation-Id", returnedCorrelationId);
 
             return Accepted(new
             {
                 status = "accepted",
-                correlationId
+                correlationId = returnedCorrelationId
             });
         }
         catch (ArgumentException ex)
         {
+            _flowLogger.Fail(
+                ApiFlowStep.RequestValidated,
+                DateTimeOffset.UtcNow,
+                errorCode    : "VALIDATION_ERROR",
+                errorMessage : ex.Message);
+
             return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _flowLogger.Fail(
+                ApiFlowStep.QueuePublishing,
+                DateTimeOffset.UtcNow,
+                errorCode    : "UNEXPECTED_ERROR",
+                errorMessage : ex.Message);
+            throw;
+        }
+        finally
+        {
+            // Always write the document — even on unhandled exceptions.
+            _flowLogger.Write();
         }
     }
 }

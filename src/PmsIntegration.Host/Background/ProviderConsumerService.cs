@@ -8,6 +8,7 @@ using PmsIntegration.Application.UseCases;
 using PmsIntegration.Core.Contracts;
 using PmsIntegration.Core.Abstractions;
 using PmsIntegration.Core.Domain;
+using PmsIntegration.Infrastructure.Logging.Flow;
 using PmsIntegration.Infrastructure.Options;
 using PmsIntegration.Infrastructure.RabbitMq;
 
@@ -195,16 +196,48 @@ public sealed class ProviderConsumerService : BackgroundService
             ["QueueName"]     = _mainQueue
         });
 
-        using var scope = _scopeFactory.CreateScope();
-        var handler = scope.ServiceProvider.GetRequiredService<ProcessIntegrationJobHandler>();
+        using var scope   = _scopeFactory.CreateScope();
+        var handler       = scope.ServiceProvider.GetRequiredService<ProcessIntegrationJobHandler>();
+        var providerLogger = scope.ServiceProvider.GetRequiredService<IProviderFlowLogger>();
+        var flowTracker   = new ProviderFlowTrackerAdapter(providerLogger);
 
-        var result = await handler.HandleAsync(job, ct);
+        // ── Start PROVIDER_FLOW document ──────────────────────────────────
+        providerLogger.Start(
+            correlationId : job.CorrelationId,
+            provider      : job.ProviderKey,
+            eventType     : job.EventType,
+            eventId       : job.EventId,
+            hotelId       : job.HotelId);
 
+        var msgReceivedAt = DateTimeOffset.UtcNow;
+        providerLogger.Step(ProviderFlowStep.MessageReceived,      msgReceivedAt);
+        providerLogger.Step(ProviderFlowStep.MessageDeserialized,  msgReceivedAt);
+
+        IntegrationResult result;
+        try
+        {
+            result = await handler.HandleAsync(job, flowTracker, ct);
+        }
+        catch (Exception ex)
+        {
+            providerLogger.Fail(
+                ProviderFlowStep.HttpSending,
+                DateTimeOffset.UtcNow,
+                errorCode    : "UNHANDLED_EXCEPTION",
+                errorMessage : ex.Message);
+            providerLogger.Write();
+            throw;
+        }
+
+        // ── ACK / NACK step logging ───────────────────────────────────────
         // BUG-4 FIX: use CancellationToken.None for all ack/nack/publish so that a
         // graceful-shutdown cancellation does not leave messages unacknowledged.
         switch (result.Outcome)
         {
             case IntegrationOutcome.Success:
+                providerLogger.Step(ProviderFlowStep.MessageAcked, DateTimeOffset.UtcNow);
+                providerLogger.Complete();
+                providerLogger.Write();
                 await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, CancellationToken.None);
                 break;
 
@@ -214,6 +247,8 @@ public sealed class ProviderConsumerService : BackgroundService
                     _logger.LogWarning(
                         "Max retries ({MaxRetry}) exceeded for job {JobId} on provider {Provider} queue {QueueName}. Sending to DLQ.",
                         _queueOptions.MaxRetryAttempts, job.JobId, job.ProviderKey, _mainQueue);
+                    providerLogger.Step(ProviderFlowStep.MessageNacked, DateTimeOffset.UtcNow,
+                        $"Max retries exceeded — sending to DLQ");
                     await _publisher.PublishDlqAsync(job, _dlqQueue, attempt, result.ErrorCode, result.ErrorMessage, CancellationToken.None);
                 }
                 else
@@ -221,8 +256,12 @@ public sealed class ProviderConsumerService : BackgroundService
                     _logger.LogInformation(
                         "Scheduling retry {NextAttempt}/{MaxRetry} for job {JobId} on provider {Provider}.",
                         attempt + 1, _queueOptions.MaxRetryAttempts, job.JobId, job.ProviderKey);
+                    providerLogger.Step(ProviderFlowStep.RetryScheduled, DateTimeOffset.UtcNow,
+                        $"Attempt {attempt + 1}/{_queueOptions.MaxRetryAttempts}");
                     await _publisher.PublishRetryAsync(job, _retryQueue, attempt, result.ErrorCode, result.ErrorMessage, CancellationToken.None);
                 }
+                providerLogger.Complete();
+                providerLogger.Write();
                 await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, CancellationToken.None);
                 break;
 
@@ -230,7 +269,11 @@ public sealed class ProviderConsumerService : BackgroundService
                 _logger.LogWarning(
                     "Non-retryable failure for job {JobId} on provider {Provider} queue {QueueName}. Sending to DLQ. ErrorCode={ErrorCode}",
                     job.JobId, job.ProviderKey, _mainQueue, result.ErrorCode);
+                providerLogger.Step(ProviderFlowStep.MessageNacked, DateTimeOffset.UtcNow,
+                    $"Non-retryable: {result.ErrorCode}");
                 await _publisher.PublishDlqAsync(job, _dlqQueue, attempt, result.ErrorCode, result.ErrorMessage, CancellationToken.None);
+                providerLogger.Complete();
+                providerLogger.Write();
                 await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, CancellationToken.None);
                 break;
         }
