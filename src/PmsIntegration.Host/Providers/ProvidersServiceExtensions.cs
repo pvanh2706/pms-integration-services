@@ -33,9 +33,10 @@ public static class ProvidersServiceExtensions
         // ── Register each provider plugin ────────────────────────────────
         // Each call registers: Options, HttpClient (if needed), Mapper,
         // RequestBuilder, Client, and services.AddSingleton<IPmsProvider, XxxProvider>().
-        services.AddFakeProvider(configuration);
+        
+        // services.AddFakeProvider(configuration);
         services.AddTigerProvider(configuration);
-        services.AddOperaProvider(configuration);
+        // services.AddOperaProvider(configuration);
 
         // ── Register the factory that collects all IPmsProvider instances ─
         // PmsProviderFactory receives IEnumerable<IPmsProvider> from DI

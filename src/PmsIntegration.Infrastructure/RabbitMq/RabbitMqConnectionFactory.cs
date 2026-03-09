@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 using PmsIntegration.Infrastructure.Options;
+using System.Linq;
 
 namespace PmsIntegration.Infrastructure.RabbitMq;
 
@@ -49,7 +50,6 @@ public sealed class RabbitMqConnectionFactory : IAsyncDisposable
 
             var factory = new ConnectionFactory
             {
-                HostName    = _options.Host,
                 Port        = _options.Port,
                 VirtualHost = _options.VirtualHost,
                 UserName    = _options.UserName,
@@ -67,11 +67,14 @@ public sealed class RabbitMqConnectionFactory : IAsyncDisposable
                 // Async dispatch (via AsyncEventingBasicConsumer) is now the default and only mode.
             };
 
-            var conn = await factory.CreateConnectionAsync(ct);
+            var endpoints = _options.Nodes
+                .Select(n => new AmqpTcpEndpoint(n, _options.Port))
+                .ToList();
+            var conn = await factory.CreateConnectionAsync(endpoints, ct);
             SubscribeConnectionEvents(conn);
             _connection = conn;
-            _logger.LogInformation("RabbitMQ connection established to {Host}:{Port}/{VHost}.",
-                _options.Host, _options.Port, _options.VirtualHost);
+            _logger.LogInformation("RabbitMQ connection established to [{Nodes}]:{Port}/{VHost}.",
+                string.Join(",", _options.Nodes), _options.Port, _options.VirtualHost);
             return _connection;
         }
         finally

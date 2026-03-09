@@ -18,6 +18,7 @@ public sealed class PmsProviderFactory : IPmsProviderFactory
 
     public PmsProviderFactory(IEnumerable<IPmsProvider> providers)
     {
+        // Lây tất cả IPmsProvider đã đăng ký trong DI và xây dựng dictionary để truy xuất nhanh theo provider code.
         _providers = new Dictionary<string, IPmsProvider>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var provider in providers)

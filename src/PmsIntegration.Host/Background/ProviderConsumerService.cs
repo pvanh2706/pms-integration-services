@@ -22,19 +22,21 @@ namespace PmsIntegration.Host.Background;
 /// </summary>
 public sealed class ProviderConsumerService : BackgroundService
 {
-    private readonly string _mainQueue;
-    private readonly string _retryQueue;
-    private readonly string _dlqQueue;
-    private readonly RabbitMqConnectionFactory _connectionFactory;
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IQueuePublisher _publisher;
-    private readonly QueueOptions _queueOptions;
-    private readonly int _reconnectDelaySeconds;
-    private readonly ILogger<ProviderConsumerService> _logger;
+    private readonly string _mainQueue; // Queue chính mà consumer này sẽ subscribe, được xác định dựa trên provider code và có thể được cấu hình qua appsettings
+    private readonly string _retryQueue; // Queue retry tương ứng với mainQueue
+    private readonly string _dlqQueue; // Queue dead-letter tương ứng với mainQueue
+    private readonly RabbitMqConnectionFactory _connectionFactory; // Factory để tạo kết nối RabbitMQ, được chia sẻ giữa các consumer để tận dụng connection pooling và auto-recovery
+    private readonly IServiceScopeFactory _scopeFactory; // Factory để tạo scope DI cho mỗi consumer, đảm bảo lifetime của dependencies
+    private readonly IQueuePublisher _publisher; // Publisher để mỗi consumer có thể publish message nếu cần (ví dụ: dead-lettering)
+    private readonly QueueOptions _queueOptions; // Lấy cấu hình queue từ appsettings để xác định tên queue cho mỗi provider
+    private readonly RabbitMqTopology _topology; // Topology để declare queue trước khi consume
+    private readonly int _reconnectDelaySeconds; // Thời gian chờ trước khi reconnect khi mất kết nối
+    private readonly ILogger<ProviderConsumerService> _logger; // Logger để theo dõi hoạt động và lỗi của consumer
 
     public ProviderConsumerService(
         string mainQueue,
         RabbitMqConnectionFactory connectionFactory,
+        RabbitMqTopology topology,
         IServiceScopeFactory scopeFactory,
         IQueuePublisher publisher,
         IOptions<QueueOptions> queueOptions,
@@ -45,6 +47,7 @@ public sealed class ProviderConsumerService : BackgroundService
         _retryQueue = $"{mainQueue}.retry";
         _dlqQueue = $"{mainQueue}.dlq";
         _connectionFactory = connectionFactory;
+        _topology = topology;
         _scopeFactory = scopeFactory;
         _publisher = publisher;
         _queueOptions = queueOptions.Value;
@@ -96,15 +99,19 @@ public sealed class ProviderConsumerService : BackgroundService
     {
         _logger.LogInformation("Consumer connecting to queue: {Queue}", _mainQueue);
 
+        await _topology.DeclareProviderQueuesAsync(_mainQueue, stoppingToken);
+
         var conn    = await _connectionFactory.GetConnectionAsync(stoppingToken);
         var channel = await conn.CreateChannelAsync(cancellationToken: stoppingToken);
-        await channel.BasicQosAsync(0, 1, false, stoppingToken);
+        ushort prefetch = 1; // Tác dụng: chỉ lấy 1 message từ queue mỗi lần, đảm bảo xử lý tuần tự và tránh mất message khi consumer crash giữa chừng. Có thể điều chỉnh nếu cần xử lý song song.
+
+        await channel.BasicQosAsync(0, prefetch, false, stoppingToken);
 
         // TCS that fires when the channel closes (abnormal = exception; clean = result).
         var channelClosed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var consumer = new AsyncEventingBasicConsumer(channel);
-
+        // Đăng ký sự kiện shutdown của consumer để phát hiện khi nào channel bị đóng (do broker disconnect hoặc lỗi) và kích hoạt channelClosed TCS để thoát khỏi vòng xử lý hiện tại và kích hoạt reconnect loop.
         consumer.ShutdownAsync += (_, args) =>
         {
             if (stoppingToken.IsCancellationRequested)
@@ -114,7 +121,7 @@ public sealed class ProviderConsumerService : BackgroundService
                     new Exception($"Channel shutdown (initiator={args.Initiator}): {args.ReplyText}"));
             return Task.CompletedTask;
         };
-
+        // Đăng ký sự kiện nhận message của consumer. Mỗi khi có message mới, ProcessMessageAsync sẽ được gọi để xử lý message đó. Nếu có lỗi không xử lý được trong ProcessMessageAsync, message sẽ bị nack và requeue để tránh mất dữ liệu.
         consumer.ReceivedAsync += async (_, ea) =>
         {
             try
