@@ -93,14 +93,10 @@ public sealed class ProcessIntegrationJobHandler
         try
         {
             // ── Build request ─────────────────────────────────────────────
-            flowTracker?.OnStep(ProviderFlowStepNames.ProviderPayloadValidated);
-            flowTracker?.OnStep(ProviderFlowStepNames.RequestBuilding);
-
             var request = await provider.BuildRequestAsync(job, ct);
             flowTracker?.OnRequestBuilt(request);
 
             // ── Send request ──────────────────────────────────────────────
-            flowTracker?.OnStep(ProviderFlowStepNames.HttpSending);
             var response = await provider.SendAsync(request, ct);
             flowTracker?.OnResponseReceived(response);
 

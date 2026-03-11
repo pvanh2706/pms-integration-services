@@ -139,6 +139,20 @@ public sealed class ApiFlowLogger : IApiFlowLogger
     }
 
     /// <inheritdoc/>
+    public void SetHttpStatusCode(int statusCode) => _doc.HttpStatusCode = statusCode;
+
+    /// <inheritdoc/>
+    public void SetResponseBody(string responseBody) => _doc.ResponseBody = responseBody;
+
+    /// <inheritdoc/>
+    public void SetClientInfo(string? ipAddress, int? port, string? requestUrl)
+    {
+        _doc.ClientIpAddress = ipAddress;
+        _doc.ClientPort      = port;
+        _doc.RequestUrl      = requestUrl;
+    }
+
+    /// <inheritdoc/>
     public void Write()
     {
         if (_written) return;
@@ -148,8 +162,29 @@ public sealed class ApiFlowLogger : IApiFlowLogger
         if (_doc.EndedAtUtc == default)
             _doc.EndedAtUtc = _clock.UtcNow;
 
-        // Serilog destructures the object into Elasticsearch as a nested document.
-        // The "@l" override keeps it at Information level regardless of status.
+        // Project only the fields needed for API_FLOW documents.
+        // Null properties in the anonymous type will be omitted by Serilog destructuring.
+        var slim = new
+        {
+            _doc.LogType,
+            _doc.CorrelationId,
+            _doc.StartedAtUtc,
+            _doc.EndedAtUtc,
+            _doc.DurationMs,
+            _doc.Status,
+            _doc.HttpStatusCode,
+            _doc.ClientIpAddress,
+            _doc.ClientPort,
+            _doc.RequestUrl,
+            RequestBody  = _doc.RequestPayload?.BodyMasked,
+            ResponseBody = _doc.ResponseBody,
+            Steps        = _doc.Steps.Select(s => new { s.Step, s.Status, s.DurationMs }).ToList(),
+            // Fail fields — null on success, populated on failure
+            _doc.FailedStep,
+            _doc.ErrorCode,
+            _doc.ErrorMessage,
+        };
+
         _logger.LogInformation(
             "[{LogType}] corr={CorrelationId} status={Status} steps={StepCount} duration={DurationMs}ms {@FlowLog}",
             _doc.LogType,
@@ -157,6 +192,6 @@ public sealed class ApiFlowLogger : IApiFlowLogger
             _doc.Status,
             _doc.Steps.Count,
             _doc.DurationMs,
-            _doc);
+            slim);
     }
 }

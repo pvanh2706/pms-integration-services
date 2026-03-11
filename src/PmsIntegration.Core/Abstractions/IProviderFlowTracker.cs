@@ -11,9 +11,6 @@ namespace PmsIntegration.Core.Abstractions;
 /// </summary>
 public interface IProviderFlowTracker
 {
-    /// <summary>Records a named step that completed at the current wall-clock time.</summary>
-    void OnStep(string stepName);
-
     /// <summary>Called after the provider request has been built.</summary>
     void OnRequestBuilt(ProviderRequest request);
 

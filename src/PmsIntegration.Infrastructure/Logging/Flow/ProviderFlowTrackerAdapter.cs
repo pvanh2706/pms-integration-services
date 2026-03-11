@@ -23,15 +23,10 @@ public sealed class ProviderFlowTrackerAdapter : IProviderFlowTracker
     }
 
     /// <inheritdoc/>
-    public void OnStep(string stepName)
-    {
-        _flowLogger.Step(stepName, DateTimeOffset.UtcNow);
-    }
-
-    /// <inheritdoc/>
     public void OnRequestBuilt(ProviderRequest request)
     {
-        _flowLogger.Step(ProviderFlowStep.RequestBuilt, DateTimeOffset.UtcNow);
+        // Log HTTP_SENDING to mark the moment the request is about to be sent.
+        _flowLogger.Step(ProviderFlowStep.HttpSending, DateTimeOffset.UtcNow);
 
         // Capture the outgoing provider request (body masked)
         var body      = request.JsonBody ?? string.Empty;
@@ -61,8 +56,6 @@ public sealed class ProviderFlowTrackerAdapter : IProviderFlowTracker
     /// <inheritdoc/>
     public void OnResponseReceived(ProviderResponse response)
     {
-        _flowLogger.Step(ProviderFlowStep.HttpResponseReceived, DateTimeOffset.UtcNow);
-
         var rawBody   = response.Body ?? string.Empty;
         var masked    = PayloadMasker.Mask(rawBody);
         var sizeBytes = string.IsNullOrEmpty(rawBody) ? 0L : Encoding.UTF8.GetByteCount(rawBody);
@@ -75,8 +68,7 @@ public sealed class ProviderFlowTrackerAdapter : IProviderFlowTracker
             bodySizeBytes  : sizeBytes,
             parsedResult   : parsed);
 
-        _flowLogger.Step(ProviderFlowStep.ResponseParsed, DateTimeOffset.UtcNow,
-            $"HTTP {response.StatusCode} — {parsed}");
+        _flowLogger.Step(ProviderFlowStep.HttpResponseReceived, DateTimeOffset.UtcNow);
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────

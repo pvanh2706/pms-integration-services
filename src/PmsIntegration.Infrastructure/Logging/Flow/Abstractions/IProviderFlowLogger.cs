@@ -28,4 +28,7 @@ public interface IProviderFlowLogger : IFlowLogger
         string? maskedBody,
         long bodySizeBytes,
         string? parsedResult);
+
+    /// <summary>Records the masked body of the message received from the queue.</summary>
+    void SetQueueBody(string? maskedBody);
 }

@@ -162,6 +162,9 @@ public sealed class ProviderFlowLogger : IProviderFlowLogger
     }
 
     /// <inheritdoc/>
+    public void SetQueueBody(string? maskedBody) => _doc.QueueBodyMasked = maskedBody;
+
+    /// <inheritdoc/>
     public void Write()
     {
         if (_written) return;
@@ -169,6 +172,29 @@ public sealed class ProviderFlowLogger : IProviderFlowLogger
 
         if (_doc.EndedAtUtc == default)
             _doc.EndedAtUtc = _clock.UtcNow;
+
+        // Project only the fields needed for PROVIDER_FLOW documents.
+        var slim = new
+        {
+            _doc.LogType,
+            _doc.CorrelationId,
+            _doc.EventType,
+            _doc.StartedAtUtc,
+            _doc.QueueBodyMasked,
+            ProviderEndpoint     = _doc.ProviderRequest?.Endpoint,
+            ProviderMethod       = _doc.ProviderRequest?.MethodName,
+            ProviderRequestBody  = _doc.ProviderRequest?.BodyMasked,
+            ProviderHttpStatus   = _doc.ProviderResponse?.HttpStatusCode,
+            ProviderResponseBody = _doc.ProviderResponse?.BodyMasked,
+            _doc.EndedAtUtc,
+            _doc.DurationMs,
+            _doc.Status,
+            Steps = _doc.Steps.Select(s => new { s.Step, s.Status, s.DurationMs }).ToList(),
+            // Fail fields — null on success, populated on failure
+            _doc.FailedStep,
+            _doc.ErrorCode,
+            _doc.ErrorMessage,
+        };
 
         _logger.LogInformation(
             "[{LogType}] corr={CorrelationId} provider={Provider} status={Status} steps={StepCount} duration={DurationMs}ms {@FlowLog}",
@@ -178,6 +204,6 @@ public sealed class ProviderFlowLogger : IProviderFlowLogger
             _doc.Status,
             _doc.Steps.Count,
             _doc.DurationMs,
-            _doc);
+            slim);
     }
 }

@@ -17,4 +17,13 @@ public interface IApiFlowLogger : IFlowLogger
     /// <param name="maskedBody">Body with sensitive fields replaced by "***".</param>
     /// <param name="contentType">e.g. "application/json".</param>
     void SetRequestPayload(string? rawBody, string maskedBody, string? contentType);
+
+    /// <summary>Records the HTTP status code returned to the API caller.</summary>
+    void SetHttpStatusCode(int statusCode);
+
+    /// <summary>Records the response body returned to the API caller (serialized as JSON string).</summary>
+    void SetResponseBody(string responseBody);
+
+    /// <summary>Records the client connection info (IP, port, request URL).</summary>
+    void SetClientInfo(string? ipAddress, int? port, string? requestUrl);
 }

@@ -9,6 +9,7 @@ using PmsIntegration.Core.Contracts;
 using PmsIntegration.Core.Abstractions;
 using PmsIntegration.Core.Domain;
 using PmsIntegration.Infrastructure.Logging.Flow;
+using PmsIntegration.Infrastructure.Logging.Masking;
 using PmsIntegration.Infrastructure.Options;
 using PmsIntegration.Infrastructure.RabbitMq;
 
@@ -209,9 +210,13 @@ public sealed class ProviderConsumerService : BackgroundService
             eventId       : job.EventId,
             hotelId       : job.HotelId);
 
+        // Capture the queue message body (masked) for the PROVIDER_FLOW document.
+        var queueBodyRaw    = job.Data.HasValue ? job.Data.Value.GetRawText() : null;
+        var queueBodyMasked = queueBodyRaw is not null ? PayloadMasker.MaskJson(queueBodyRaw) : null;
+        providerLogger.SetQueueBody(queueBodyMasked);
+
         var msgReceivedAt = DateTimeOffset.UtcNow;
-        providerLogger.Step(ProviderFlowStep.MessageReceived,      msgReceivedAt);
-        providerLogger.Step(ProviderFlowStep.MessageDeserialized,  msgReceivedAt);
+        providerLogger.Step(ProviderFlowStep.MessageReceived, msgReceivedAt);
 
         IntegrationResult result;
         try
@@ -235,7 +240,6 @@ public sealed class ProviderConsumerService : BackgroundService
         switch (result.Outcome)
         {
             case IntegrationOutcome.Success:
-                providerLogger.Step(ProviderFlowStep.MessageAcked, DateTimeOffset.UtcNow);
                 providerLogger.Complete();
                 providerLogger.Write();
                 await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, CancellationToken.None);
@@ -247,8 +251,6 @@ public sealed class ProviderConsumerService : BackgroundService
                     _logger.LogWarning(
                         "Max retries ({MaxRetry}) exceeded for job {JobId} on provider {Provider} queue {QueueName}. Sending to DLQ.",
                         _queueOptions.MaxRetryAttempts, job.JobId, job.ProviderKey, _mainQueue);
-                    providerLogger.Step(ProviderFlowStep.MessageNacked, DateTimeOffset.UtcNow,
-                        $"Max retries exceeded — sending to DLQ");
                     await _publisher.PublishDlqAsync(job, _dlqQueue, attempt, result.ErrorCode, result.ErrorMessage, CancellationToken.None);
                 }
                 else
@@ -256,8 +258,6 @@ public sealed class ProviderConsumerService : BackgroundService
                     _logger.LogInformation(
                         "Scheduling retry {NextAttempt}/{MaxRetry} for job {JobId} on provider {Provider}.",
                         attempt + 1, _queueOptions.MaxRetryAttempts, job.JobId, job.ProviderKey);
-                    providerLogger.Step(ProviderFlowStep.RetryScheduled, DateTimeOffset.UtcNow,
-                        $"Attempt {attempt + 1}/{_queueOptions.MaxRetryAttempts}");
                     await _publisher.PublishRetryAsync(job, _retryQueue, attempt, result.ErrorCode, result.ErrorMessage, CancellationToken.None);
                 }
                 providerLogger.Complete();
@@ -269,8 +269,6 @@ public sealed class ProviderConsumerService : BackgroundService
                 _logger.LogWarning(
                     "Non-retryable failure for job {JobId} on provider {Provider} queue {QueueName}. Sending to DLQ. ErrorCode={ErrorCode}",
                     job.JobId, job.ProviderKey, _mainQueue, result.ErrorCode);
-                providerLogger.Step(ProviderFlowStep.MessageNacked, DateTimeOffset.UtcNow,
-                    $"Non-retryable: {result.ErrorCode}");
                 await _publisher.PublishDlqAsync(job, _dlqQueue, attempt, result.ErrorCode, result.ErrorMessage, CancellationToken.None);
                 providerLogger.Complete();
                 providerLogger.Write();

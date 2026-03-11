@@ -67,7 +67,25 @@ public sealed class FlowLogDocument
 
     public PayloadLog? RequestPayload { get; set; }
 
+    /// <summary>HTTP status code returned to the API caller (API_FLOW only).</summary>
+    public int? HttpStatusCode { get; set; }
+
+    /// <summary>Response body returned to the API caller (API_FLOW only).</summary>
+    public string? ResponseBody { get; set; }
+
+    /// <summary>IP address of the client that sent the request (API_FLOW only).</summary>
+    public string? ClientIpAddress { get; set; }
+
+    /// <summary>Port of the client that sent the request (API_FLOW only).</summary>
+    public int? ClientPort { get; set; }
+
+    /// <summary>Full request URL including scheme, host, path, and query string (API_FLOW only).</summary>
+    public string? RequestUrl { get; set; }
+
     // ── Provider I/O (PROVIDER_FLOW only) ─────────────────────────────────
+
+    /// <summary>Masked body of the message received from the queue (PROVIDER_FLOW only).</summary>
+    public string? QueueBodyMasked { get; set; }
 
     public ProviderRequestLog?  ProviderRequest  { get; set; }
     public ProviderResponseLog? ProviderResponse { get; set; }
