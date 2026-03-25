@@ -3,7 +3,6 @@ using Microsoft.Extensions.Options;
 using PmsIntegration.Application.DI;
 using PmsIntegration.Infrastructure.DI;
 using PmsIntegration.Infrastructure.Logging;
-using PmsIntegration.Host.Middleware;
 using PmsIntegration.Host.Options;
 using PmsIntegration.Host.Background;
 using PmsIntegration.Host.Providers;
@@ -62,8 +61,6 @@ if (!app.Environment.IsDevelopment() && securityOpts.FixedToken == "change-me-in
 // /health sits outside /api/pms, so PmsTokenMiddleware skips it automatically.
 // Kubernetes/Docker liveness and readiness probes should point to /health.
 app.MapHealthChecks("/health");
-
-app.UseMiddleware<PmsTokenMiddleware>();
 
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();

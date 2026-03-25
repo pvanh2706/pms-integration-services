@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PmsIntegration.Core.Abstractions;
+using PmsIntegration.Providers.Tiger.Incoming;
 using PmsIntegration.Providers.Tiger.Mapping;
 
 namespace PmsIntegration.Providers.Tiger.DI;
@@ -28,6 +29,9 @@ public static class TigerServiceExtensions
         services.AddSingleton<TigerRequestBuilder>();
         services.AddSingleton<TigerClient>();
         services.AddSingleton<IPmsProvider, TigerProvider>();
+
+        // Incoming: handles SOAP messages received from TigerTMS
+        services.AddSingleton<TigerIncomingMessageDispatcher>();
 
         return services;
     }

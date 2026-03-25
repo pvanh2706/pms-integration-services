@@ -1,0 +1,79 @@
+2. Messages from TigerTMS to PMS 
+ 
+The PMS interface should make available via a soap URL the following method call which takes a string parameter, and returns a string parameter – “SUCCESS” or “FAILED” . 
+If “FAILED” is returned please extend the response with a failure reason for logging purposes. Eg. “FAILED – Invalid room number.” 
+ 
+String SendMessageToExternalInterface (string Msg)  - General single input method. 
+ 
+A simple C#  Example of the required WebMethod is as follows: 
+ 
+namespace InterfaceMessageOut 
+{ 
+    /// <summary> 
+    /// Summary description for Service1 
+    /// </summary> 
+    [WebService(Namespace = "http://CONNECTED GUESTSgenericinterface.org/")] 
+    [WebServiceBinding(ConformsTo = WsiProfiles.BasicProfile1_1)] 
+    [System.ComponentModel.ToolboxItem(false)] 
+    // To allow this Web Service to be called from script, using ASP.NET AJAX, uncomment the following line.  
+    // [System.Web.Script.Services.ScriptService] 
+    public class InterfaceMessageOut : System.Web.Services.WebService 
+    { 
+        public string SendMessageToExternalInterface(string Msg) 
+        { 
+            string Response = "SUCCESS";             return Response; 
+        } 
+     } 
+     
+} 
+ 
+ 
+ 
+Due to the fact that the WEB API is constantly evolving, please successfully acknowledge any messages which you do not implement in order for the communication to continue without any timeouts/retransmission attempts. 
+ 
+ 
+ 
+The following types of messages will be sent to the PMS system 
+ 
+Charge Records:  Different Types – CallRecord, Internet , Minibar and Video 
+Room Status  
+Wakeup Answer Status 
+Request Bill 
+Request Checkout 
+Request Refresh 
+Voicemail 
+ 
+ 
+ 
+1. CALL RECORD:          chargerecord Type -  callrecord 
+ 
+<?xml version="1.0" encoding="utf-8"?> 
+<!--Reservation Number--> 
+<chargerecord resno="" type="callrecord">  resno sent but always blank, for future use 
+      <!--Site --> 
+      <site>HotelX</site> 
+<!--Room number --> 
+ <room>100</room> 
+<!--Date time of call --> 
+ <datetime>06/04/2010 09:00:03</datetime> 
+<!--Dialled --> 
+ <dialled>01202387678</dialled> 
+<!--Duration--> 
+ <duration>00:23:12</duration> 
+<!--Call Type O = OUTGOING I = incoming String--> 
+ <calltype>O</calltype> 
+<!--Call Charge major . minor currency String--> 
+ <charge>9.12</charge> 
+<!--Call Category    F= Free, L = Local, N = National, I = International, M = Mobile>  <callcategory>N</callcategory> 
+ 
+<!--Additional User Defined Fields as required 0-19→           <userdefine0>1234</userdefine0> 
+ 
+<!--Valid Message Key String (SUPPLIED BY TIGERTMS TO VALIDATE THE MESSAGE IN/OUT)--> <wsuserkey>Abc249PPP6pppk14</wsuserkey> 
+</chargerecord> 
+ 
+ 
+If xml nodes are not used by the interfacing system eg. userdefine0 then TigerTMS will still pass the values but as a blank string eg. <userdefine0></userdefine0> or will not supply the nodes, the  external interface should cater for either scenario. 
+ 
+The wsuserkey is a unique key used to identify the system, this should be configurable at the interfacing system 
+ 	 
+ 
