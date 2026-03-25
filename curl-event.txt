@@ -1,0 +1,20 @@
+// ==== Wakeup =====================
+
+
+curl --location 'https://ichargev7publictest.tigertms.com/GenericPMS/' \
+--header 'Content-Type: text/xml' \
+--data '<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+    <soap:Body>
+        <externalInterfaceMessageIn xmlns="http://tigergenericinterface.org/">
+            <XMLString>&lt;?xml version="1.0" encoding="utf-8"?&gt;&lt;wakeupsetresults resno="Res110"&gt;&lt;site&gt;iLink&lt;/site&gt;&lt;room&gt;110&lt;/room&gt;&lt;extension&gt;2110&lt;/extension&gt;&lt;wakeupdate&gt;07/04/2022&lt;/wakeupdate&gt;&lt;wakeuptime&gt;07:30:00&lt;/wakeuptime&gt;&lt;wsuserkey&gt;Abc249PPP6pppk14&lt;/wsuserkey&gt;&lt;/wakeupsetresults&gt;</XMLString>
+        </externalInterfaceMessageIn>
+    </soap:Body>
+</soap:Envelope>'
+
+
+// ==== Wakeup Clear =====================
+
+curl --location 'https://ichargev7publictest.tigertms.com/GenericPMS/' \
+--header 'Content-Type: text/xml' \
+--data '<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"><soap:Body><externalInterfaceMessageIn xmlns="http://tigergenericinterface.org/"><XMLString>&lt;?xml version="1.0" encoding="utf-8"?&gt;&lt;wakeupclearresults resno="Res110"&gt;&lt;site&gt;iLink&lt;/site&gt;&lt;room&gt;110&lt;/room&gt;&lt;extension&gt;2110&lt;/extension&gt;&lt;wakeupdate&gt;07/04/2022&lt;/wakeupdate&gt;&lt;wakeuptime&gt;07:30:00&lt;/wakeuptime&gt;&lt;wsuserkey&gt;Abc249PPP6pppk14&lt;/wsuserkey&gt;&lt;/wakeupclearresults&gt;</XMLString></externalInterfaceMessageIn></soap:Body></soap:Envelope>'

@@ -36,7 +36,7 @@ public static class ProvidersServiceExtensions
         
         // services.AddFakeProvider(configuration);
         services.AddTigerProvider(configuration);
-        // services.AddOperaProvider(configuration);
+        services.AddOperaProvider(configuration);
 
         // ── Register the factory that collects all IPmsProvider instances ─
         // PmsProviderFactory receives IEnumerable<IPmsProvider> from DI

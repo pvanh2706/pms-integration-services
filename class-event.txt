@@ -1,0 +1,95 @@
+
+    public class Wakeup
+    {
+        /// <summary>
+        /// Tiger XML Field: resno
+        /// Vị trí XML: Attribute của <wakeupsetresults>
+        /// Ghi chú: Mã đặt phòng
+        /// </summary>
+        public required string ReservationNumber { get; set; }
+
+        /// <summary>
+        /// Tiger XML Field: site
+        /// Vị trí XML: <site>
+        /// Ghi chú: Định danh site
+        /// </summary>
+        public required string SiteCode { get; set; }
+
+        /// <summary>
+        /// Tiger XML Field: room
+        /// Vị trí XML: <room>
+        /// Ghi chú: Số phòng
+        /// </summary>
+        public required string RoomNumber { get; set; }
+
+        /// <summary>
+        /// Tiger XML Field: wakeupdate
+        /// Vị trí XML: <wakeupdate>
+        /// Ghi chú: Format DD/MM/YYYY
+        /// </summary>
+        public DateTime WakeupDate { get; set; }
+
+        /// <summary>
+        /// Tiger XML Field: wakeuptime
+        /// Vị trí XML: <wakeuptime>
+        /// Ghi chú: Format HH:MM:SS
+        /// </summary>
+        public TimeSpan WakeupTime { get; set; }
+
+        /// <summary>
+        /// Tiger XML Field: wsuserkey
+        /// Vị trí XML: <wsuserkey>
+        /// Ghi chú: Bắt buộc
+        /// </summary>
+        public required string WsUserKey { get; set; }
+    }
+
+    /// <summary>
+    /// Sheet: WakeupClear
+    /// </summary>
+    public class WakeupClear
+    {
+        /// <summary>
+        /// Tiger XML Field: resno
+        /// Vị trí XML: Attribute của <wakeupsetresults>
+        /// Ghi chú: Mã đặt phòng
+        /// </summary>
+        public required string ReservationNumber { get; set; }
+
+        /// <summary>
+        /// Tiger XML Field: site
+        /// Vị trí XML: <site>
+        /// Ghi chú: Định danh site
+        /// </summary>
+        public required string SiteCode { get; set; }
+
+        /// <summary>
+        /// Tiger XML Field: room
+        /// Vị trí XML: <room>
+        /// Ghi chú: Số phòng
+        /// </summary>
+        public required string RoomNumber { get; set; }
+
+        /// <summary>
+        /// Tiger XML Field: wakeupdate
+        /// Vị trí XML: <wakeupdate>
+        /// Ghi chú: Format DD/MM/YYYY
+        /// </summary>
+        public DateTime WakeupDate { get; set; }
+
+        /// <summary>
+        /// Tiger XML Field: wakeuptime
+        /// Vị trí XML: <wakeuptime>
+        /// Ghi chú: Format HH:MM:SS
+        /// </summary>
+        public TimeSpan WakeupTime { get; set; }
+
+        /// <summary>
+        /// Tiger XML Field: wsuserkey
+        /// Vị trí XML: <wsuserkey>
+        /// Ghi chú: Bắt buộc
+        /// </summary>
+        public required string WsUserKey { get; set; }
+    }
+
+   

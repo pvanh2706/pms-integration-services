@@ -6,43 +6,33 @@ using PmsIntegration.Providers.Abstractions.EventData;
 namespace PmsIntegration.Providers.Tiger.Mapping;
 
 /// <summary>
-/// Builds the SOAP XML body for the TigerTMS GenericPMS <c>checkIn</c> operation.
+/// Builds the SOAP XML body for the TigerTMS GenericPMS <c>checkIn</c> operation
+/// carrying a <c>checkoutresults</c> inner payload.
 /// Pure mapping — no I/O, no side-effects.
 /// </summary>
-internal static class TigerCheckinSoapBuilder
+internal static class TigerCheckoutSoapBuilder
 {
     /// <summary>
-    /// Builds the SOAP envelope string for a CheckIn event.
+    /// Builds the SOAP envelope string for a Checkout event.
     /// </summary>
     /// <param name="job">The integration job carrying guest data in <see cref="IntegrationJob.Data"/>.</param>
     /// <param name="wsUserKey">Web-service user key from config (wsuserkey element).</param>
     internal static string Build(IntegrationJob job, string wsUserKey)
     {
-        var data = EventDataParser.Parse<CheckinEventData>(job.Data);
+        var data = EventDataParser.Parse<CheckoutEventData>(job.Data);
 
         // ── Inner XML (unencoded) ─────────────────────────────────────────────
         var inner = new StringBuilder();
         inner.Append("<?xml version=\"1.0\" encoding=\"utf-8\"?>");
-        inner.Append($"<checkinresults resno=\"{Escape(data.ReservationNumber)}\">");
+        inner.Append($"<checkoutresults resno=\"{Escape(data.ReservationNumber)}\">");
         inner.Append($"<site>{Escape(data.SiteCode)}</site>");
         inner.Append($"<room>{Escape(data.RoomNumber)}</room>");
         inner.Append($"<title>{Escape(data.Title ?? "")}</title>");
         inner.Append($"<last>{Escape(data.LastName ?? "")}</last>");
         inner.Append($"<first>{Escape(data.FirstName ?? "")}</first>");
         inner.Append($"<guestid>{Escape(data.GuestId?.ToString() ?? "")}</guestid>");
-        inner.Append($"<lang>{Escape(data.LanguageCode ?? "")}</lang>");
-        inner.Append($"<group>{Escape(data.GroupName ?? "")}</group>");
-        inner.Append($"<vip>{Escape(data.VipStatus ?? "")}</vip>");
-        inner.Append($"<email>{Escape(data.Email ?? "")}</email>");
-        inner.Append($"<mobile>{Escape(data.Mobile ?? "")}</mobile>");
-        inner.Append($"<arrival>{Escape(data.ArrivalDate?.ToString("dd/MM/yyyy") ?? "")}</arrival>");
-        inner.Append($"<departure>{Escape(data.DepartureDate?.ToString("dd/MM/yyyy") ?? "")}</departure>");
-        inner.Append($"<tv>{Escape(data.TvSetting ?? "")}</tv>");
-        inner.Append($"<minibar>{Escape(data.MinibarSetting ?? "")}</minibar>");
-        inner.Append($"<viewbill>{Escape(data.AllowViewBill?.ToString() ?? "")}</viewbill>");
-        inner.Append($"<expressco>{Escape(data.AllowExpressCO?.ToString() ?? "")}</expressco>");
         inner.Append($"<wsuserkey>{Escape(wsUserKey)}</wsuserkey>");
-        inner.Append("</checkinresults>");
+        inner.Append("</checkoutresults>");
 
         // ── SOAP envelope — XMLString wraps the entity-encoded inner XML ─────
         var soap = new StringBuilder();

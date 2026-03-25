@@ -35,7 +35,7 @@ public sealed class PmsEventController : ControllerBase
         var correlationId = string.IsNullOrWhiteSpace(envelope.CorrelationId)
             ? Guid.NewGuid().ToString()
             : envelope.CorrelationId;
-
+        #region API flow logging
         // ── Start flow ────────────────────────────────────────────────────
         _flowLogger.Start(
             correlationId : correlationId,
@@ -59,20 +59,20 @@ public sealed class PmsEventController : ControllerBase
         var rawBody    = envelope.Data.HasValue ? envelope.Data.Value.GetRawText() : null;
         var maskedBody = rawBody is not null ? PayloadMasker.MaskJson(rawBody) : string.Empty;
         _flowLogger.SetRequestPayload(rawBody, maskedBody, "application/json");
-
+        #endregion
         try
         {
             // ── Delegate to handler (validate + route + publish) ──────────
             var publishStart = DateTimeOffset.UtcNow;
             var returnedCorrelationId = await _handler.HandleAsync(envelope, ct);
-
+            #region API flow logging (continued)
             var publishedAt = DateTimeOffset.UtcNow;
             _flowLogger.Step(ApiFlowStep.QueuePublished, publishedAt);
 
             _flowLogger.Complete();
             _flowLogger.SetHttpStatusCode(StatusCodes.Status202Accepted);
             _flowLogger.SetResponseBody($"{{\"status\":\"accepted\",\"correlationId\":\"{returnedCorrelationId}\"}}");
-
+            #endregion
             Response.Headers.Append("X-Correlation-Id", returnedCorrelationId);
 
             return Accepted(new
@@ -83,6 +83,7 @@ public sealed class PmsEventController : ControllerBase
         }
         catch (ArgumentException ex)
         {
+            #region API flow logging (continued)
             _flowLogger.Fail(
                 ApiFlowStep.RequestReceived,
                 DateTimeOffset.UtcNow,
@@ -90,17 +91,19 @@ public sealed class PmsEventController : ControllerBase
                 errorMessage : ex.Message);
             _flowLogger.SetHttpStatusCode(StatusCodes.Status400BadRequest);
             _flowLogger.SetResponseBody($"{{\"error\":\"{ex.Message}\"}}");
-
+            #endregion
             return BadRequest(new { error = ex.Message });
         }
         catch (Exception ex)
         {
+            #region API flow logging (continued)
             _flowLogger.Fail(
                 ApiFlowStep.QueuePublished,
                 DateTimeOffset.UtcNow,
                 errorCode    : "UNEXPECTED_ERROR",
                 errorMessage : ex.Message);
             _flowLogger.SetHttpStatusCode(StatusCodes.Status500InternalServerError);
+            #endregion
             throw;
         }
         finally

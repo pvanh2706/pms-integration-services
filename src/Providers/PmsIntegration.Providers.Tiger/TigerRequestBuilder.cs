@@ -26,7 +26,7 @@ public sealed class TigerRequestBuilder : IPmsRequestBuilder
     {
         if (job.EventType.Equals("Checkin", StringComparison.OrdinalIgnoreCase))
         {
-            var soapRequest = new ProviderRequest
+            return Task.FromResult(new ProviderRequest
             {
                 ProviderKey   = ProviderKey,
                 CorrelationId = job.CorrelationId,
@@ -34,9 +34,46 @@ public sealed class TigerRequestBuilder : IPmsRequestBuilder
                 Endpoint      = _options.SoapEndpoint,
                 JsonBody      = TigerCheckinSoapBuilder.Build(job, _options.WsUserKey),
                 Headers       = { ["Content-Type"] = "text/xml" }
-            };
+            });
+        }
 
-            return Task.FromResult(soapRequest);
+        if (job.EventType.Equals("Checkout", StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.FromResult(new ProviderRequest
+            {
+                ProviderKey   = ProviderKey,
+                CorrelationId = job.CorrelationId,
+                Method        = "POST",
+                Endpoint      = _options.SoapEndpoint,
+                JsonBody      = TigerCheckoutSoapBuilder.Build(job, _options.WsUserKey),
+                Headers       = { ["Content-Type"] = "text/xml" }
+            });
+        }
+
+        if (job.EventType.Equals("Wakeup", StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.FromResult(new ProviderRequest
+            {
+                ProviderKey   = ProviderKey,
+                CorrelationId = job.CorrelationId,
+                Method        = "POST",
+                Endpoint      = _options.SoapEndpoint,
+                JsonBody      = TigerWakeupSoapBuilder.Build(job, _options.WsUserKey, isWakeupClear: false),
+                Headers       = { ["Content-Type"] = "text/xml" }
+            });
+        }
+
+        if (job.EventType.Equals("WakeupClear", StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.FromResult(new ProviderRequest
+            {
+                ProviderKey   = ProviderKey,
+                CorrelationId = job.CorrelationId,
+                Method        = "POST",
+                Endpoint      = _options.SoapEndpoint,
+                JsonBody      = TigerWakeupSoapBuilder.Build(job, _options.WsUserKey, isWakeupClear: true),
+                Headers       = { ["Content-Type"] = "text/xml" }
+            });
         }
 
         var request = new ProviderRequest
